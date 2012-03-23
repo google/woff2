@@ -1,0 +1,52 @@
+# Build script for Linux
+# Note: this script DOESN'T include LZMA. Use the gyp-based build instead.
+#
+# Usage:
+#   $ cd ots/test/
+#   $ scons -c         # clean
+#   $ scons            # build
+#
+
+# Since the validator-checker tool might handle malicious font files, all hardening options for recent g++/ld are enabled just in case.
+# See http://wiki.debian.org/Hardening for details.
+env = Environment(CCFLAGS = ['-O2', '-I../ots-read-only/include', '-I../ots-read-only/src', '-I/usr/include/freetype2', '-ggdb', '-Wall', '-W', '-Wno-unused-parameter', '-fno-strict-aliasing', '-fPIE', '-fstack-protector', '-D_FORTIFY_SOURCE=2', '-DOTS_DEBUG'], LINKFLAGS = ['-ggdb', '-Wl,-z,relro', '-Wl,-z,now', '-pie', '-lz'])
+ 
+env.Library('libwoff2.a',
+            [
+            'woff2.cc',
+
+            # Just build all of OTS to keep things simple for now. We could
+            # refactor so that we only compile the few support routines from
+            # ots.cc that we need.
+            '../ots-read-only/src/cff.cc',
+	          '../ots-read-only/src/cff_type2_charstring.cc',
+	          '../ots-read-only/src/cmap.cc',
+	          '../ots-read-only/src/cvt.cc',
+	          '../ots-read-only/src/fpgm.cc',
+	          '../ots-read-only/src/gasp.cc',
+	          '../ots-read-only/src/gdef.cc',
+	          '../ots-read-only/src/glyf.cc',
+	          '../ots-read-only/src/gpos.cc',
+	          '../ots-read-only/src/gsub.cc',
+	          '../ots-read-only/src/hdmx.cc',
+	          '../ots-read-only/src/head.cc',
+	          '../ots-read-only/src/hhea.cc',
+	          '../ots-read-only/src/hmtx.cc',
+	          '../ots-read-only/src/kern.cc',
+	          '../ots-read-only/src/layout.cc',
+	          '../ots-read-only/src/loca.cc',
+	          '../ots-read-only/src/ltsh.cc',
+	          '../ots-read-only/src/maxp.cc',
+	          '../ots-read-only/src/metrics.cc',
+	          '../ots-read-only/src/name.cc',
+	          '../ots-read-only/src/os2.cc',
+	          '../ots-read-only/src/ots.cc',
+	          '../ots-read-only/src/post.cc',
+	          '../ots-read-only/src/prep.cc',
+	          '../ots-read-only/src/vdmx.cc',
+	          '../ots-read-only/src/vhea.cc',
+	          '../ots-read-only/src/vmtx.cc',
+	          '../ots-read-only/src/vorg.cc'
+            ])
+
+env.Program('woff2-decompress.cc', LIBS = ['woff2'], LIBPATH='.')

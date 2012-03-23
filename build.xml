@@ -1,0 +1,31 @@
+<project name="compression" default="jar">
+  <target name="clean">
+    <delete dir="build/classes" />
+    <delete dir="build/jar" />
+  </target>
+
+  <target name="compile">
+    <mkdir dir="build/classes" />
+    <javac srcdir="src" destdir="build/classes" includeantruntime="false">
+      <compilerarg value="-Xlint" />
+      <classpath>
+        <fileset dir="lib" includes="*.jar" />
+      </classpath>
+    </javac>
+  </target>
+
+  <target name="jar" depends="compile">
+    <mkdir dir="build/jar" />
+    <jar destfile="build/jar/compression.jar" basedir="build/classes">
+      <zipfileset src="lib/eotconverter.jar" />
+      <zipfileset src="lib/guava-11.0.1.jar" />
+      <zipfileset src="lib/sfntly.jar" />
+      <zipfileset src="lib/woffconverter.jar" />
+      <manifest>
+        <attribute name="Main-Class" value="com.google.typography.font.compression.CompressionRunner" />
+      </manifest>
+    </jar>
+  </target>
+
+</project>
+
