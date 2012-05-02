@@ -68,7 +68,7 @@ const uint32_t kCompressionTypeMask = 0xf;
 const uint32_t kCompressionTypeNone = 0;
 const uint32_t kCompressionTypeGzip = 1;
 const uint32_t kCompressionTypeLzma = 2;
-
+const uint32_t kShortFlagsContinue = 3;
 
 struct Point {
   int x;
@@ -89,7 +89,7 @@ struct Table {
 };
 
 // Based on section 6.1.1 of MicroType Express draft spec
-bool Read255UShort(ots::Buffer *buf, unsigned int *value) {
+bool Read255UShort(ots::Buffer* buf, unsigned int* value) {
   const int kWordCode = 253;
   const int kOneMoreByteCode2 = 254;
   const int kOneMoreByteCode1 = 255;
@@ -125,7 +125,7 @@ bool Read255UShort(ots::Buffer *buf, unsigned int *value) {
   }
 }
 
-bool ReadBase128(ots::Buffer *buf, uint32_t *value) {
+bool ReadBase128(ots::Buffer* buf, uint32_t* value) {
   uint32_t result = 0;
   for (size_t i = 0; i < 5; ++i) {
     uint8_t code = 0;
@@ -142,7 +142,7 @@ bool ReadBase128(ots::Buffer *buf, uint32_t *value) {
   return OTS_FAILURE();
 }
 
-size_t StoreU32(uint8_t *dst, size_t offset, uint32_t x) {
+size_t StoreU32(uint8_t* dst, size_t offset, uint32_t x) {
   dst[offset] = x >> 24;
   dst[offset + 1] = (x >> 16) & 0xff;
   dst[offset + 2] = (x >> 8) & 0xff;
@@ -150,7 +150,7 @@ size_t StoreU32(uint8_t *dst, size_t offset, uint32_t x) {
   return offset + 4;
 }
 
-size_t Store16(uint8_t *dst, size_t offset, int x) {
+size_t Store16(uint8_t* dst, size_t offset, int x) {
   dst[offset] = x >> 8;
   dst[offset + 1] = x & 0xff;
   return offset + 2;
@@ -160,9 +160,9 @@ int WithSign(int flag, int baseval) {
   return (flag & 1) ? baseval : -baseval;
 }
 
-bool TripletDecode(const uint8_t *flags_in, const uint8_t *in, size_t in_size,
-    unsigned int n_points, std::vector<Point> *result,
-    size_t *in_bytes_consumed) {
+bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
+    unsigned int n_points, std::vector<Point>* result,
+    size_t* in_bytes_consumed) {
   int x = 0;
   int y = 0;
 
@@ -241,7 +241,7 @@ bool TripletDecode(const uint8_t *flags_in, const uint8_t *in, size_t in_size,
 // beginning of a simple glyph. Returns true on success.
 bool StorePoints(const std::vector<Point> &points, 
     unsigned int n_contours, unsigned int instruction_length,
-    uint8_t *dst, size_t dst_size, size_t *glyph_size) {
+    uint8_t* dst, size_t dst_size, size_t* glyph_size) {
   unsigned int flag_offset = kEndPtsOfContoursOffset + 2 * n_contours + 2 +
     instruction_length;
   int last_flag = -1;
@@ -329,7 +329,7 @@ bool StorePoints(const std::vector<Point> &points,
 
 // Compute the bounding box of the coordinates, and store into a glyf buffer.
 // A precondition is that there are at least 10 bytes available.
-void ComputeBbox(const std::vector<Point> &points, uint8_t *dst) {
+void ComputeBbox(const std::vector<Point> &points, uint8_t* dst) {
   int x_min = 0;
   int y_min = 0;
   int x_max = 0;
@@ -352,9 +352,9 @@ void ComputeBbox(const std::vector<Point> &points, uint8_t *dst) {
 
 // Process entire bbox stream. This is done as a separate pass to allow for
 // composite bbox computations (an optional more aggressive transform).
-bool ProcessBboxStream(ots::Buffer *bbox_stream, unsigned int n_glyphs,
-    const std::vector<uint32_t> &loca_values, uint8_t *glyf_buf) {
-  const uint8_t *buf = bbox_stream->buffer();
+bool ProcessBboxStream(ots::Buffer* bbox_stream, unsigned int n_glyphs,
+    const std::vector<uint32_t> &loca_values, uint8_t* glyf_buf) {
+  const uint8_t* buf = bbox_stream->buffer();
   unsigned int bitmap_length = ((n_glyphs + 31) >> 5) << 2;
   if (bbox_stream->length() < bitmap_length) {
     return OTS_FAILURE();
@@ -372,8 +372,8 @@ bool ProcessBboxStream(ots::Buffer *bbox_stream, unsigned int n_glyphs,
   return true;
 }
 
-bool ProcessComposite(ots::Buffer *composite_stream, uint8_t *dst,
-    size_t dst_size, size_t *glyph_size, bool *have_instructions) {
+bool ProcessComposite(ots::Buffer* composite_stream, uint8_t* dst,
+    size_t dst_size, size_t* glyph_size, bool* have_instructions) {
   size_t start_offset = composite_stream->offset();
   bool we_have_instructions = false;
 
@@ -416,7 +416,7 @@ bool ProcessComposite(ots::Buffer *composite_stream, uint8_t *dst,
 
 // Build TrueType loca table
 bool StoreLoca(const std::vector<uint32_t> &loca_values, int index_format,
-    uint8_t *dst, size_t dst_size) {
+    uint8_t* dst, size_t dst_size) {
   size_t loca_size = loca_values.size();
   size_t offset_size = index_format ? 4 : 2;
   if (offset_size * loca_size > dst_size) {
@@ -435,9 +435,9 @@ bool StoreLoca(const std::vector<uint32_t> &loca_values, int index_format,
 }
 
 // Reconstruct entire glyf table based on transformed original
-bool ReconstructGlyf(const uint8_t *data, size_t data_size,
-    uint8_t *dst, size_t dst_size,
-    uint8_t *loca_buf, size_t loca_size) {
+bool ReconstructGlyf(const uint8_t* data, size_t data_size,
+    uint8_t* dst, size_t dst_size,
+    uint8_t* loca_buf, size_t loca_size) {
   ots::Buffer file(data, data_size);
   uint32_t version;
   const int kNumSubStreams = 7;
@@ -485,7 +485,7 @@ bool ReconstructGlyf(const uint8_t *data, size_t data_size,
       return OTS_FAILURE();
     }
     // fprintf(stderr, "n_contours[%d] = %d\n", i, n_contours);
-    uint8_t *glyf_dst = dst + loca_offset;
+    uint8_t* glyf_dst = dst + loca_offset;
     size_t glyf_dst_size = dst_size - loca_offset;
     if (n_contours == 0xffff) {
       // composite glyph
@@ -526,8 +526,8 @@ bool ReconstructGlyf(const uint8_t *data, size_t data_size,
       if (flag_size > flag_stream.length() - flag_stream.offset()) {
         return OTS_FAILURE();
       }
-      const uint8_t *flags_buf = flag_stream.buffer() + flag_stream.offset();
-      const uint8_t *triplet_buf = glyph_stream.buffer() +
+      const uint8_t* flags_buf = flag_stream.buffer() + flag_stream.offset();
+      const uint8_t* triplet_buf = glyph_stream.buffer() +
         glyph_stream.offset();
       size_t triplet_size = glyph_stream.length() - glyph_stream.offset();
       size_t triplet_bytes_consumed = 0;
@@ -553,7 +553,7 @@ bool ReconstructGlyf(const uint8_t *data, size_t data_size,
         return OTS_FAILURE();
       }
       // fprintf(stderr, "%d: instruction size = %d\n", i, instruction_size);
-      uint8_t *instruction_dst = glyf_dst + kEndPtsOfContoursOffset +
+      uint8_t* instruction_dst = glyf_dst + kEndPtsOfContoursOffset +
         2 * n_contours;
       Store16(instruction_dst, 0, instruction_size);
       if (!instruction_stream.Read(instruction_dst + 2, instruction_size)) {
@@ -589,7 +589,7 @@ bool ReconstructGlyf(const uint8_t *data, size_t data_size,
 // This is linear search, but could be changed to binary because we
 // do have a guarantee that the tables are sorted by tag. But the total
 // cpu time is expected to be very small in any case.
-const Table *FindTable(const std::vector<Table> &tables, uint32_t tag) {
+const Table* FindTable(const std::vector<Table> &tables, uint32_t tag) {
   size_t n_tables = tables.size();
   for (size_t i = 0; i < n_tables; ++i) {
     if (tables[i].tag == tag) {
@@ -600,11 +600,11 @@ const Table *FindTable(const std::vector<Table> &tables, uint32_t tag) {
 }
 
 bool ReconstructTransformed(const std::vector<Table> &tables, uint32_t tag,
-    const uint8_t *transformed_buf, size_t transformed_size,
-    uint8_t *dst) {
+    const uint8_t* transformed_buf, size_t transformed_size,
+    uint8_t* dst) {
   if (tag == TAG('g', 'l', 'y', 'f')) {
-    const Table *glyf_table = FindTable(tables, tag);
-    const Table *loca_table = FindTable(tables, TAG('l', 'o', 'c', 'a'));
+    const Table* glyf_table = FindTable(tables, tag);
+    const Table* loca_table = FindTable(tables, TAG('l', 'o', 'c', 'a'));
     if (glyf_table == NULL || loca_table == NULL) {
       return OTS_FAILURE();
     }
@@ -633,7 +633,7 @@ template<typename T> T Round4(T value) {
   return (value + 3) & ~3;
 }
 
-uint32_t ComputeChecksum(const uint8_t *buf, size_t size) {
+uint32_t ComputeChecksum(const uint8_t* buf, size_t size) {
   uint32_t checksum = 0;
   for (size_t i = 0; i < size; i += 4) {
     // We assume the addition is mod 2^32. This is a pretty safe assumption,
@@ -644,8 +644,8 @@ uint32_t ComputeChecksum(const uint8_t *buf, size_t size) {
   return checksum;
 }
 
-bool FixChecksums(const std::vector<Table> &tables, uint8_t *dst) {
-  const Table *head_table = FindTable(tables, TAG('h', 'e', 'a', 'd'));
+bool FixChecksums(const std::vector<Table> &tables, uint8_t* dst) {
+  const Table* head_table = FindTable(tables, TAG('h', 'e', 'a', 'd'));
   if (head_table == NULL ||
       head_table->dst_length < kCheckSumAdjustmentOffset + 4) {
     return OTS_FAILURE();
@@ -655,9 +655,9 @@ bool FixChecksums(const std::vector<Table> &tables, uint8_t *dst) {
   size_t n_tables = tables.size();
   uint32_t file_checksum = 0;
   for (size_t i = 0; i < n_tables; ++i) {
-    const Table *table = &tables[i];
+    const Table* table = &tables[i];
     size_t table_length = table->dst_length;
-    uint8_t *table_data = dst + table->dst_offset;
+    uint8_t* table_data = dst + table->dst_offset;
     uint32_t checksum = ComputeChecksum(table_data, table_length);
     StoreU32(dst, kSfntHeaderSize + i * kSfntEntrySize + 4, checksum);
     file_checksum += checksum;
@@ -669,11 +669,11 @@ bool FixChecksums(const std::vector<Table> &tables, uint8_t *dst) {
   return true;
 }
 
-bool Woff2Uncompress(uint8_t *dst_buf, size_t dst_size,
-    const uint8_t *src_buf, size_t src_size, uint32_t compression_type) {
+bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,
+    const uint8_t* src_buf, size_t src_size, uint32_t compression_type) {
   if (compression_type == kCompressionTypeGzip) {
     uLongf uncompressed_length = dst_size;
-    int r = uncompress((Bytef *)dst_buf, &uncompressed_length,
+    int r = uncompress(reinterpret_cast<Bytef *>(dst_buf), &uncompressed_length,
         src_buf, src_size);
     if (r != Z_OK || uncompressed_length != src_size) {
       return OTS_FAILURE();
@@ -701,10 +701,10 @@ bool Woff2Uncompress(uint8_t *dst_buf, size_t dst_size,
   return OTS_FAILURE();
 }
 
-bool ReadLongDirectory(ots::Buffer *file, std::vector<Table> *tables,
+bool ReadLongDirectory(ots::Buffer* file, std::vector<Table>* tables,
     size_t num_tables) {
   for (size_t i = 0; i < num_tables; ++i) {
-    Table *table = &(*tables)[i];
+    Table* table = &(*tables)[i];
     if (!file->ReadU32(&table->tag) ||
         !file->ReadU32(&table->flags) ||
         !file->ReadU32(&table->src_length) ||
@@ -748,11 +748,11 @@ const uint32_t known_tags[29] = {
   TAG('G', 'S', 'U', 'B'),  // 28
 };
 
-bool ReadShortDirectory(ots::Buffer *file, std::vector<Table> *tables,
+bool ReadShortDirectory(ots::Buffer* file, std::vector<Table>* tables,
     size_t num_tables) {
   uint32_t last_compression_type = 0;
   for (size_t i = 0; i < num_tables; ++i) {
-    Table *table = &(*tables)[i];
+    Table* table = &(*tables)[i];
     uint8_t flag_byte = 0;
     if (!file->ReadU8(&flag_byte)) {
       return OTS_FAILURE();
@@ -763,13 +763,22 @@ bool ReadShortDirectory(ots::Buffer *file, std::vector<Table> *tables,
         return OTS_FAILURE();
       }
     } else {
+      if ((flag_byte & 0x1f) >= (sizeof(known_tags) / sizeof(known_tags[0]))) {
+        return OTS_FAILURE();
+      }
       tag = known_tags[flag_byte & 0x1f];
     }
     uint32_t flags = flag_byte >> 6;
-    if (flags == 3) {
+    if (flags == kShortFlagsContinue) {
       flags = last_compression_type | kWoff2FlagsContinueStream;
     } else {
-      last_compression_type = flags;
+      if (flags == kCompressionTypeNone ||
+          flags == kCompressionTypeGzip ||
+          flags == kCompressionTypeLzma) {
+        last_compression_type = flags;
+      } else {
+        return OTS_FAILURE();
+      }
     }
     if ((flag_byte & 0x20) != 0) {
       flags |= kWoff2FlagsTransform;
@@ -785,7 +794,7 @@ bool ReadShortDirectory(ots::Buffer *file, std::vector<Table> *tables,
       }
     }
     uint32_t src_length = transform_length;
-    if ((flag_byte >> 6) == 1 | (flag_byte >> 6) == 2) {
+    if ((flag_byte >> 6) == 1 || (flag_byte >> 6) == 2) {
       if (!ReadBase128(file, &src_length)) {
         return OTS_FAILURE();
       }
@@ -803,67 +812,88 @@ bool ReadShortDirectory(ots::Buffer *file, std::vector<Table> *tables,
 
 namespace ots {
 
-size_t ComputeWOFF2FinalSize(const uint8_t *data, size_t length) {
+size_t ComputeWOFF2FinalSize(const uint8_t* data, size_t length) {
   ots::Buffer file(data, length);
 
   file.Skip(16);
   uint32_t total_length = 0;
   if (!file.ReadU32(&total_length)) {
-    return OTS_FAILURE();
+    return 0;
   }
   return total_length;
 }
 
-bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
-                       const uint8_t *data, size_t length) {
+bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
+                       const uint8_t* data, size_t length) {
+  static const uint32_t kWoff2Signature = 0x774f4632; // "wOF2"
   ots::Buffer file(data, length);
 
   uint32_t signature = 0;
   uint32_t flavor = 0;
-  if (!file.ReadU32(&signature) || signature != 0x774f4632 ||
+  if (!file.ReadU32(&signature) || signature != kWoff2Signature ||
       !file.ReadU32(&flavor)) {
     return OTS_FAILURE();
   }
-  file.Skip(4);
-  uint16_t num_tables = 0;
-  if (!file.ReadU16(&num_tables)) {
+
+  // TODO(bashi): Should call IsValidVersionTag() here.
+
+  uint32_t reported_length = 0;
+  if (!file.ReadU32(&reported_length) || length != reported_length) {
     return OTS_FAILURE();
   }
-  file.Skip(30);
+  uint16_t num_tables = 0;
+  if (!file.ReadU16(&num_tables) || !num_tables) {
+    return OTS_FAILURE();
+  }
+  // We don't care about these fields of the header:
+  //   uint16_t reserved
+  //   uint32_t total_sfnt_size
+  //   uint16_t major_version, minor_version
+  //   uint32_t meta_offset, meta_length, meta_orig_length
+  //   uint32_t priv_offset, priv_length
+  if (!file.Skip(30)) {
+    return OTS_FAILURE();
+  }
   std::vector<Table> tables(num_tables);
   // Note: change below to ReadLongDirectory to enable long format.
   if (!ReadShortDirectory(&file, &tables, num_tables)) {
     return OTS_FAILURE();
   }
-  size_t src_offset = file.offset();
-  size_t dst_offset = kSfntHeaderSize + kSfntEntrySize * num_tables;
-  size_t uncompressed_sum = 0;
-  for (int i = 0; i < num_tables; ++i) {
-    Table *table = &tables[i];
+  uint64_t src_offset = file.offset();
+  uint64_t dst_offset = kSfntHeaderSize +
+      kSfntEntrySize * static_cast<uint64_t>(num_tables);
+  uint64_t uncompressed_sum = 0;
+  for (uint16_t i = 0; i < num_tables; ++i) {
+    Table* table = &tables[i];
     table->src_offset = src_offset;
-    if (src_offset + table->src_length < src_offset) {
+    src_offset += table->src_length;
+    if (src_offset > std::numeric_limits<uint32_t>::max()) {
       return OTS_FAILURE();
     }
-    src_offset += table->src_length;
     src_offset = Round4(src_offset);  // TODO: reconsider
     table->dst_offset = dst_offset;
-    if (dst_offset + table->dst_length < dst_offset) {
+    dst_offset += table->dst_length;
+    if (dst_offset > std::numeric_limits<uint32_t>::max()) {
       return OTS_FAILURE();
     }
-    dst_offset += table->dst_length;
     dst_offset = Round4(dst_offset);
     if ((table->flags & kCompressionTypeMask) != kCompressionTypeNone) {
-      if (uncompressed_sum + table->src_length < uncompressed_sum) {
+      uncompressed_sum += table->src_length;
+      if (uncompressed_sum > std::numeric_limits<uint32_t>::max()) {
         return OTS_FAILURE();
       }
-      uncompressed_sum += table->src_length;
     }
   }
   // Enforce same 30M limit on uncompressed tables as OTS
   if (uncompressed_sum > 30 * 1024 * 1024) {
     return OTS_FAILURE();
   }
-  if (dst_offset > result_length) {
+  if (src_offset > length || dst_offset > result_length) {
+    return OTS_FAILURE();
+  }
+
+  const uint32_t sfnt_header_and_table_directory_size = 12 + 16 * num_tables;
+  if (sfnt_header_and_table_directory_size > result_length) {
     return OTS_FAILURE();
   }
 
@@ -879,8 +909,8 @@ bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
   offset = Store16(result, offset, output_search_range);
   offset = Store16(result, offset, max_pow2);
   offset = Store16(result, offset, (num_tables << 4) - output_search_range);
-  for (int i = 0; i < num_tables; ++i) {
-    const Table *table = &tables[i];
+  for (uint16_t i = 0; i < num_tables; ++i) {
+    const Table* table = &tables[i];
     offset = StoreU32(result, offset, table->tag);
     offset = StoreU32(result, offset, 0);  // checksum, to fill in later
     offset = StoreU32(result, offset, table->dst_offset);
@@ -888,12 +918,12 @@ bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
   }
   std::vector<uint8_t> uncompressed_buf;
   bool continue_valid = false;
-  for (int i = 0; i < num_tables; ++i) {
-    const Table *table = &tables[i];
+  for (uint16_t i = 0; i < num_tables; ++i) {
+    const Table* table = &tables[i];
     uint32_t flags = table->flags;
-    const uint8_t *src_buf = data + table->src_offset;
+    const uint8_t* src_buf = data + table->src_offset;
     uint32_t compression_type = flags & kCompressionTypeMask;
-    const uint8_t *transform_buf = NULL;
+    const uint8_t* transform_buf = NULL;
     size_t transform_length = table->transform_length;
     if ((flags & kWoff2FlagsContinueStream) != 0) {
       if (!continue_valid) {
@@ -906,15 +936,15 @@ bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
       transform_buf = src_buf;
       continue_valid = false;
     } else if ((flags & kWoff2FlagsContinueStream) == 0) {
-      size_t total_size = transform_length;
-      for (int j = i + 1; j < num_tables; ++j) {
+      uint64_t total_size = transform_length;
+      for (uint16_t j = i + 1; j < num_tables; ++j) {
         if ((tables[j].flags & kWoff2FlagsContinueStream) == 0) {
           break;
         }
-        if (total_size + tables[j].transform_length < total_size) {
+        total_size += tables[j].transform_length;
+        if (total_size > std::numeric_limits<uint32_t>::max()) {
           return OTS_FAILURE();
         }
-        total_size += tables[j].transform_length;
       }
       uncompressed_buf.resize(total_size);
       if (!Woff2Uncompress(&uncompressed_buf[0], total_size,
@@ -923,10 +953,16 @@ bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
       }
       transform_buf = &uncompressed_buf[0];
       continue_valid = true;
-    } 
+    } else {
+      return OTS_FAILURE();
+    }
 
     if ((flags & kWoff2FlagsTransform) == 0) {
       if (transform_length != table->dst_length) {
+        return OTS_FAILURE();
+      }
+      if (static_cast<uint64_t>(table->dst_offset + transform_length) >
+          result_length) {
         return OTS_FAILURE();
       }
       std::memcpy(result + table->dst_offset, transform_buf,
@@ -939,6 +975,9 @@ bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
     }
     if (continue_valid) {
       transform_buf += transform_length;
+      if (transform_buf > &uncompressed_buf[uncompressed_buf.size()]) {
+        return OTS_FAILURE();
+      }
     }
   }
 
