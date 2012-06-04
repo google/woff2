@@ -9,12 +9,14 @@
 // that gets all sorted out, we can get rid of these ifdefs.
 #define USE_LZMA
 
+#include <vector>
+
 #ifdef USE_LZMA
 #include "third_party/lzma_sdk/LzmaLib.h"
 #endif
 
 #include <zlib.h>
-#include <vector>
+
 #include "opentype-sanitiser.h"
 #include "ots-memory-stream.h"
 
@@ -68,6 +70,7 @@ const uint32_t kCompressionTypeMask = 0xf;
 const uint32_t kCompressionTypeNone = 0;
 const uint32_t kCompressionTypeGzip = 1;
 const uint32_t kCompressionTypeLzma = 2;
+// agl: This doesn't seem to match the value in the spec, which is 16.
 const uint32_t kShortFlagsContinue = 3;
 
 struct Point {
@@ -88,12 +91,22 @@ struct Table {
   uint32_t dst_length;
 };
 
+// TODO: copied from ots.cc, probably shouldn't be duplicated.
+// Round a value up to the nearest multiple of 4. Don't round the value in the
+// case that rounding up overflows.
+template<typename T> T Round4(T value) {
+  if (std::numeric_limits<T>::max() - value < 3) {
+    return value;
+  }
+  return (value + 3) & ~3;
+}
+
 // Based on section 6.1.1 of MicroType Express draft spec
 bool Read255UShort(ots::Buffer* buf, unsigned int* value) {
-  const int kWordCode = 253;
-  const int kOneMoreByteCode2 = 254;
-  const int kOneMoreByteCode1 = 255;
-  const int kLowestUCode = 253;
+  static const int kWordCode = 253;
+  static const int kOneMoreByteCode2 = 254;
+  static const int kOneMoreByteCode1 = 255;
+  static const int kLowestUCode = 253;
   uint8_t code = 0;
   if (!buf->ReadU8(&code)) {
     return OTS_FAILURE();
@@ -132,6 +145,10 @@ bool ReadBase128(ots::Buffer* buf, uint32_t* value) {
     if (!buf->ReadU8(&code)) {
       return OTS_FAILURE();
     }
+    // If any of the top seven bits are set then we're about to overflow.
+    if (result & 0xe0000000) {
+      return OTS_FAILURE();
+    }
     result = (result << 7) | (code & 0x7f);
     if ((code & 0x80) == 0) {
       *value = result;
@@ -144,19 +161,23 @@ bool ReadBase128(ots::Buffer* buf, uint32_t* value) {
 
 size_t StoreU32(uint8_t* dst, size_t offset, uint32_t x) {
   dst[offset] = x >> 24;
-  dst[offset + 1] = (x >> 16) & 0xff;
-  dst[offset + 2] = (x >> 8) & 0xff;
-  dst[offset + 3] = x & 0xff;
+  dst[offset + 1] = x >> 16;
+  dst[offset + 2] = x >> 8;
+  dst[offset + 3] = x;
   return offset + 4;
 }
 
 size_t Store16(uint8_t* dst, size_t offset, int x) {
   dst[offset] = x >> 8;
-  dst[offset + 1] = x & 0xff;
+  dst[offset + 1] = x;
   return offset + 2;
 }
 
 int WithSign(int flag, int baseval) {
+  // agl: it isn't generally possible to negate an arbitary integer. (For
+  // example, -2137483648 cannot be negated.) However, I believe that the range
+  // is 0 <= baseval < 65536 in which case it's safe. If you agree then there
+  // should be a comment documenting the precondition of this function.
   return (flag & 1) ? baseval : -baseval;
 }
 
@@ -167,7 +188,7 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
   int y = 0;
 
   if (n_points > in_size) {
-    return false;
+    return OTS_FAILURE();
   }
   unsigned int triplet_index = 0;
 
@@ -175,7 +196,7 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
     uint8_t flag = flags_in[i];
     bool on_curve = !(flag >> 7);
     flag &= 0x7f;
-    int n_data_bytes;
+    unsigned int n_data_bytes;
     if (flag < 84) {
       n_data_bytes = 1;
     } else if (flag < 120) {
@@ -185,13 +206,6 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
     } else {
       n_data_bytes = 4;
     }
-#if 0
-    fprintf(stderr, "flag = %d:", flag);
-    for (int j = 0; j < n_data_bytes; ++j) {
-      fprintf(stderr, " %d", in[triplet_index + j]);
-    }
-    fprintf(stderr, "\n");
-#endif
     if (triplet_index + n_data_bytes > in_size ||
         triplet_index + n_data_bytes < triplet_index) {
       return OTS_FAILURE();
@@ -223,15 +237,14 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
           (in[triplet_index + 2] << 8) + in[triplet_index + 3]);
     }
     triplet_index += n_data_bytes;
+    // agl: these additions can overflow, although I'm not sure that we care.
     x += dx;
     y += dy;
     result->push_back(Point());
-    Point &back = result->back();
+    Point& back = result->back();
     back.x = x;
     back.y = y;
     back.on_curve = on_curve;
-    // fprintf(stderr, "point %d: %d %d %s (delta %d %d)\n",
-    //    i, x, y, on_curve ? "on" : "off", dx, dy);
   }
   *in_bytes_consumed = triplet_index;
   return true;
@@ -239,20 +252,22 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
 
 // This function stores just the point data. On entry, dst points to the
 // beginning of a simple glyph. Returns true on success.
-bool StorePoints(const std::vector<Point> &points, 
+bool StorePoints(const std::vector<Point>& points,
     unsigned int n_contours, unsigned int instruction_length,
     uint8_t* dst, size_t dst_size, size_t* glyph_size) {
+  // I believe that n_contours < 65536, in which case this is safe. However, a
+  // comment and/or an assert would be good.
   unsigned int flag_offset = kEndPtsOfContoursOffset + 2 * n_contours + 2 +
     instruction_length;
   int last_flag = -1;
   int repeat_count = 0;
   int last_x = 0;
   int last_y = 0;
-  int x_bytes = 0;
-  int y_bytes = 0;
+  unsigned int x_bytes = 0;
+  unsigned int y_bytes = 0;
 
   for (unsigned int i = 0; i < points.size(); ++i) {
-    const Point &point = points[i];
+    const Point& point = points[i];
     int flag = point.on_curve ? kGlyfOnCurve : 0;
     int dx = point.x - last_x;
     int dy = point.y - last_y;
@@ -272,16 +287,20 @@ bool StorePoints(const std::vector<Point> &points,
     } else {
       y_bytes += 2;
     }
-    // fprintf(stderr, "nominal flag = %d\n", flag);
+
     if (flag == last_flag && repeat_count != 255) {
       dst[flag_offset - 1] |= kGlyfRepeat;
       repeat_count++;
     } else {
       if (repeat_count != 0) {
-        if (flag_offset >= dst_size) return OTS_FAILURE();
+        if (flag_offset >= dst_size) {
+          return OTS_FAILURE();
+        }
         dst[flag_offset++] = repeat_count;
       }
-      if (flag_offset >= dst_size) return OTS_FAILURE();
+      if (flag_offset >= dst_size) {
+        return OTS_FAILURE();
+      }
       dst[flag_offset++] = flag;
       repeat_count = 0;
     }
@@ -291,11 +310,15 @@ bool StorePoints(const std::vector<Point> &points,
   }
 
   if (repeat_count != 0) {
-    if (flag_offset >= dst_size) return OTS_FAILURE();
+    if (flag_offset >= dst_size) {
+      return OTS_FAILURE();
+    }
     dst[flag_offset++] = repeat_count;
   }
-  if (flag_offset + x_bytes + y_bytes > dst_size ||
-      flag_offset + x_bytes + y_bytes < flag_offset) {
+  // agl: overflow checks can't have multiple additions in them.
+  if (flag_offset + x_bytes < flag_offset ||
+      flag_offset + x_bytes + y_bytes < flag_offset + x_bytes ||
+      flag_offset + x_bytes + y_bytes > dst_size) {
     return OTS_FAILURE();
   }
 
@@ -310,6 +333,8 @@ bool StorePoints(const std::vector<Point> &points,
     } else if (dx > -256 && dx < 256) {
       dst[x_offset++] = std::abs(dx);
     } else {
+      // agl: this can go wrong if dx doesn't fit in an int16_t, but it's not
+      // clear if that matters.
       x_offset = Store16(dst, x_offset, dx);
     }
     last_x += dx;
@@ -329,7 +354,7 @@ bool StorePoints(const std::vector<Point> &points,
 
 // Compute the bounding box of the coordinates, and store into a glyf buffer.
 // A precondition is that there are at least 10 bytes available.
-void ComputeBbox(const std::vector<Point> &points, uint8_t* dst) {
+void ComputeBbox(const std::vector<Point>& points, uint8_t* dst) {
   int x_min = 0;
   int y_min = 0;
   int x_max = 0;
@@ -353,20 +378,30 @@ void ComputeBbox(const std::vector<Point> &points, uint8_t* dst) {
 // Process entire bbox stream. This is done as a separate pass to allow for
 // composite bbox computations (an optional more aggressive transform).
 bool ProcessBboxStream(ots::Buffer* bbox_stream, unsigned int n_glyphs,
-    const std::vector<uint32_t> &loca_values, uint8_t* glyf_buf) {
+    const std::vector<uint32_t>& loca_values, uint8_t* glyf_buf,
+    size_t glyf_buf_length) {
   const uint8_t* buf = bbox_stream->buffer();
+  // agl: I belive that n_glyphs is < 65536, making the next line safe. But a
+  // comment and/or assert is needed to document that.
   unsigned int bitmap_length = ((n_glyphs + 31) >> 5) << 2;
-  if (bbox_stream->length() < bitmap_length) {
+  if (!bbox_stream->Skip(bitmap_length)) {
     return OTS_FAILURE();
   }
-  bbox_stream->Skip(bitmap_length);
   for (unsigned int i = 0; i < n_glyphs; ++i) {
     if (buf[i >> 3] & (0x80 >> (i & 7))) {
       uint32_t loca_offset = loca_values[i];
+      // agl: again, I believe that this is safe, but the fact that loca_values
+      // has n_glyphs+1 elements should be documented.
       if (loca_values[i + 1] - loca_offset < kEndPtsOfContoursOffset) {
         return OTS_FAILURE();
       }
-      bbox_stream->Read(glyf_buf + loca_offset + 2, 8);
+      if (glyf_buf_length < 2 + 10 ||
+          loca_offset > glyf_buf_length - 2 - 10) {
+        return OTS_FAILURE();
+      }
+      if (!bbox_stream->Read(glyf_buf + loca_offset + 2, 8)) {
+        return OTS_FAILURE();
+      }
     }
   }
   return true;
@@ -399,7 +434,6 @@ bool ProcessComposite(ots::Buffer* composite_stream, uint8_t* dst,
     if (!composite_stream->Skip(arg_size)) {
       return OTS_FAILURE();
     }
-    //fprintf(stderr, "flags = %04x, arg_size = %d\n", flags, arg_size);
   }
   size_t composite_glyph_size = composite_stream->offset() - start_offset;
   if (composite_glyph_size + kCompositeGlyphBegin > dst_size) {
@@ -415,16 +449,19 @@ bool ProcessComposite(ots::Buffer* composite_stream, uint8_t* dst,
 }
 
 // Build TrueType loca table
-bool StoreLoca(const std::vector<uint32_t> &loca_values, int index_format,
+bool StoreLoca(const std::vector<uint32_t>& loca_values, int index_format,
     uint8_t* dst, size_t dst_size) {
-  size_t loca_size = loca_values.size();
-  size_t offset_size = index_format ? 4 : 2;
+  const uint64_t loca_size = loca_values.size();
+  const uint64_t offset_size = index_format ? 4 : 2;
+  if ((loca_size << 2) >> 2 != loca_size) {
+    return OTS_FAILURE();
+  }
   if (offset_size * loca_size > dst_size) {
     return OTS_FAILURE();
   }
   size_t offset = 0;
   for (size_t i = 0; i < loca_values.size(); ++i) {
-    int value = loca_values[i];
+    uint32_t value = loca_values[i];
     if (index_format) {
       offset = StoreU32(dst, offset, value);
     } else {
@@ -438,31 +475,34 @@ bool StoreLoca(const std::vector<uint32_t> &loca_values, int index_format,
 bool ReconstructGlyf(const uint8_t* data, size_t data_size,
     uint8_t* dst, size_t dst_size,
     uint8_t* loca_buf, size_t loca_size) {
+  static const int kNumSubStreams = 7;
   ots::Buffer file(data, data_size);
   uint32_t version;
-  const int kNumSubStreams = 7;
   std::vector<std::pair<const uint8_t*, size_t> > substreams(kNumSubStreams);
 
   if (!file.ReadU32(&version)) {
     return OTS_FAILURE();
   }
-  uint16_t num_glyphs = 0;
-  uint16_t index_format = 0;
+  uint16_t num_glyphs;
+  uint16_t index_format;
   if (!file.ReadU16(&num_glyphs) ||
       !file.ReadU16(&index_format)) {
     return OTS_FAILURE();
   }
-  // fprintf(stderr, "num_glyphs = %d\n", num_glyphs);
   unsigned int offset = (2 + kNumSubStreams) * 4;
+  // agl: data_size must be >= offset, but this condition isn't established
+  // initially.
+  if (offset > data_size) {
+    return OTS_FAILURE();
+  }
   for (int i = 0; i < kNumSubStreams; ++i) {
-    uint32_t substream_size = 0;
+    uint32_t substream_size;
     if (!file.ReadU32(&substream_size)) {
       return OTS_FAILURE();
     }
     if (substream_size > data_size - offset) {
       return OTS_FAILURE();
     }
-    // fprintf(stderr, "substream size = %d\n", substream_size);
     substreams[i] = std::make_pair(data + offset, substream_size);
     offset += substream_size;
   }
@@ -484,7 +524,6 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
     if (!n_contour_stream.ReadU16(&n_contours)) {
       return OTS_FAILURE();
     }
-    // fprintf(stderr, "n_contours[%d] = %d\n", i, n_contours);
     uint8_t* glyf_dst = dst + loca_offset;
     size_t glyf_dst_size = dst_size - loca_offset;
     if (n_contours == 0xffff) {
@@ -520,6 +559,9 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
           return OTS_FAILURE();
         }
         n_points_vec.push_back(n_points_contour);
+        if (total_n_points + n_points_contour < total_n_points) {
+          return OTS_FAILURE();
+        }
         total_n_points += n_points_contour;
       }
       unsigned int flag_size = total_n_points;
@@ -535,7 +577,9 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
             &points, &triplet_bytes_consumed)) {
         return OTS_FAILURE();
       }
-      if (glyf_dst_size < kEndPtsOfContoursOffset + 2 * n_contours) {
+      const uint32_t header_and_endpts_contours_size =
+          kEndPtsOfContoursOffset + 2 * n_contours;
+      if (glyf_dst_size < header_and_endpts_contours_size) {
         return OTS_FAILURE();
       }
       Store16(glyf_dst, 0, n_contours);
@@ -544,17 +588,24 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
       int end_point = -1;
       for (unsigned int contour_ix = 0; contour_ix < n_contours; ++contour_ix) {
         end_point += n_points_vec[contour_ix];
+        // agl: this fails if end_point > 65535, does that matter?
         offset = Store16(glyf_dst, offset, end_point);
       }
-      flag_stream.Skip(flag_size);
-      glyph_stream.Skip(triplet_bytes_consumed);
+      if (!flag_stream.Skip(flag_size)) {
+        return OTS_FAILURE();
+      }
+      if (!glyph_stream.Skip(triplet_bytes_consumed)) {
+        return OTS_FAILURE();
+      }
       unsigned int instruction_size;
       if (!Read255UShort(&glyph_stream, &instruction_size)) {
         return OTS_FAILURE();
       }
-      // fprintf(stderr, "%d: instruction size = %d\n", i, instruction_size);
-      uint8_t* instruction_dst = glyf_dst + kEndPtsOfContoursOffset +
-        2 * n_contours;
+      if (glyf_dst_size - header_and_endpts_contours_size <
+          instruction_size + 2) {
+        return OTS_FAILURE();
+      }
+      uint8_t* instruction_dst = glyf_dst + header_and_endpts_contours_size;
       Store16(instruction_dst, 0, instruction_size);
       if (!instruction_stream.Read(instruction_dst + 2, instruction_size)) {
         return OTS_FAILURE();
@@ -570,8 +621,7 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
     if (glyph_size + 3 < glyph_size) {
       return OTS_FAILURE();
     }
-    // Round up to 4-byte alignment
-    glyph_size = (glyph_size + 3) & -4;
+    glyph_size = Round4(glyph_size);
     if (glyph_size > dst_size - loca_offset) {
       // This shouldn't happen, but this test defensively maintains the
       // invariant that loca_offset <= dst_size.
@@ -580,7 +630,8 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
     loca_offset += glyph_size;
   }
   loca_values[num_glyphs] = loca_offset;
-  if (!ProcessBboxStream(&bbox_stream, num_glyphs, loca_values, dst)) {
+  if (!ProcessBboxStream(&bbox_stream, num_glyphs, loca_values,
+          dst, dst_size)) {
     return OTS_FAILURE();
   }
   return StoreLoca(loca_values, index_format, loca_buf, loca_size);
@@ -589,7 +640,7 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
 // This is linear search, but could be changed to binary because we
 // do have a guarantee that the tables are sorted by tag. But the total
 // cpu time is expected to be very small in any case.
-const Table* FindTable(const std::vector<Table> &tables, uint32_t tag) {
+const Table* FindTable(const std::vector<Table>& tables, uint32_t tag) {
   size_t n_tables = tables.size();
   for (size_t i = 0; i < n_tables; ++i) {
     if (tables[i].tag == tag) {
@@ -599,18 +650,26 @@ const Table* FindTable(const std::vector<Table> &tables, uint32_t tag) {
   return NULL;
 }
 
-bool ReconstructTransformed(const std::vector<Table> &tables, uint32_t tag,
+bool ReconstructTransformed(const std::vector<Table>& tables, uint32_t tag,
     const uint8_t* transformed_buf, size_t transformed_size,
-    uint8_t* dst) {
+    uint8_t* dst, size_t dst_length) {
   if (tag == TAG('g', 'l', 'y', 'f')) {
     const Table* glyf_table = FindTable(tables, tag);
     const Table* loca_table = FindTable(tables, TAG('l', 'o', 'c', 'a'));
     if (glyf_table == NULL || loca_table == NULL) {
       return OTS_FAILURE();
     }
+    if (static_cast<uint64_t>(glyf_table->dst_offset + glyf_table->dst_length) >
+        dst_length) {
+      return OTS_FAILURE();
+    }
+    if (static_cast<uint64_t>(loca_table->dst_offset + loca_table->dst_length) >
+        dst_length) {
+      return OTS_FAILURE();
+    }
     return ReconstructGlyf(transformed_buf, transformed_size,
         dst + glyf_table->dst_offset, glyf_table->dst_length,
-        dst + loca_table->dst_offset, loca_table->dst_offset);
+        dst + loca_table->dst_offset, loca_table->dst_length);
   } else if (tag == TAG('l', 'o', 'c', 'a')) {
     // processing was already done by glyf table, but validate
     if (!FindTable(tables, TAG('g', 'l', 'y', 'f'))) {
@@ -623,28 +682,20 @@ bool ReconstructTransformed(const std::vector<Table> &tables, uint32_t tag,
   return true;
 }
 
-// TODO: copied from ots.cc, probably shouldn't be duplicated.
-// Round a value up to the nearest multiple of 4. Don't round the value in the
-// case that rounding up overflows.
-template<typename T> T Round4(T value) {
-  if (std::numeric_limits<T>::max() - value < 3) {
-    return value;
-  }
-  return (value + 3) & ~3;
-}
-
 uint32_t ComputeChecksum(const uint8_t* buf, size_t size) {
   uint32_t checksum = 0;
   for (size_t i = 0; i < size; i += 4) {
     // We assume the addition is mod 2^32. This is a pretty safe assumption,
     // but technically it's undefined behavior.
+    // agl: in reference to the comment above: when using uint32_t, the fact
+    // that addition is mod 2^32 is well defined.
     checksum += (buf[i] << 24) | (buf[i + 1] << 16) |
       (buf[i + 2] << 8) | buf[i + 3];
   }
   return checksum;
 }
 
-bool FixChecksums(const std::vector<Table> &tables, uint8_t* dst) {
+bool FixChecksums(const std::vector<Table>& tables, uint8_t* dst) {
   const Table* head_table = FindTable(tables, TAG('h', 'e', 'a', 'd'));
   if (head_table == NULL ||
       head_table->dst_length < kCheckSumAdjustmentOffset + 4) {
@@ -675,6 +726,7 @@ bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,
     uLongf uncompressed_length = dst_size;
     int r = uncompress(reinterpret_cast<Bytef *>(dst_buf), &uncompressed_length,
         src_buf, src_size);
+    // agl: I think src_size should be dst_size in the next line.
     if (r != Z_OK || uncompressed_length != src_size) {
       return OTS_FAILURE();
     }
@@ -753,11 +805,11 @@ bool ReadShortDirectory(ots::Buffer* file, std::vector<Table>* tables,
   uint32_t last_compression_type = 0;
   for (size_t i = 0; i < num_tables; ++i) {
     Table* table = &(*tables)[i];
-    uint8_t flag_byte = 0;
+    uint8_t flag_byte;
     if (!file->ReadU8(&flag_byte)) {
       return OTS_FAILURE();
     }
-    uint32_t tag = 0;
+    uint32_t tag;
     if ((flag_byte & 0x1f) == 0x1f) {
       if (!file->ReadU32(&tag)) {
         return OTS_FAILURE();
@@ -783,7 +835,7 @@ bool ReadShortDirectory(ots::Buffer* file, std::vector<Table>* tables,
     if ((flag_byte & 0x20) != 0) {
       flags |= kWoff2FlagsTransform;
     }
-    uint32_t dst_length = 0;
+    uint32_t dst_length;
     if (!ReadBase128(file, &dst_length)) {
       return OTS_FAILURE();
     }
@@ -814,10 +866,10 @@ namespace ots {
 
 size_t ComputeWOFF2FinalSize(const uint8_t* data, size_t length) {
   ots::Buffer file(data, length);
+  uint32_t total_length;
 
-  file.Skip(16);
-  uint32_t total_length = 0;
-  if (!file.ReadU32(&total_length)) {
+  if (!file.Skip(16) ||
+      !file.ReadU32(&total_length)) {
     return 0;
   }
   return total_length;
@@ -828,8 +880,8 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   static const uint32_t kWoff2Signature = 0x774f4632; // "wOF2"
   ots::Buffer file(data, length);
 
-  uint32_t signature = 0;
-  uint32_t flavor = 0;
+  uint32_t signature;
+  uint32_t flavor;
   if (!file.ReadU32(&signature) || signature != kWoff2Signature ||
       !file.ReadU32(&flavor)) {
     return OTS_FAILURE();
@@ -837,11 +889,11 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
 
   // TODO(bashi): Should call IsValidVersionTag() here.
 
-  uint32_t reported_length = 0;
+  uint32_t reported_length;
   if (!file.ReadU32(&reported_length) || length != reported_length) {
     return OTS_FAILURE();
   }
-  uint16_t num_tables = 0;
+  uint16_t num_tables;
   if (!file.ReadU16(&num_tables) || !num_tables) {
     return OTS_FAILURE();
   }
@@ -969,7 +1021,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
           transform_length);
     } else {
       if (!ReconstructTransformed(tables, table->tag,
-            transform_buf, transform_length, result)) {
+            transform_buf, transform_length, result, result_length)) {
         return OTS_FAILURE();
       }
     }
