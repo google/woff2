@@ -6,7 +6,7 @@
 
   <target name="compile">
     <mkdir dir="build/classes" />
-    <javac srcdir="src" destdir="build/classes" includeantruntime="false">
+    <javac srcdir="src" destdir="build/classes" includeantruntime="false" debug="true">
       <compilerarg value="-Xlint" />
       <classpath>
         <fileset dir="lib" includes="*.jar" />
