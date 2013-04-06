@@ -66,11 +66,14 @@ const size_t kWoff2EntrySize = 20;
 
 const size_t kLzmaHeaderSize = 13;
 
+// Compression type values common to both short and long formats
 const uint32_t kCompressionTypeMask = 0xf;
 const uint32_t kCompressionTypeNone = 0;
 const uint32_t kCompressionTypeGzip = 1;
 const uint32_t kCompressionTypeLzma = 2;
-// agl: This doesn't seem to match the value in the spec, which is 16.
+
+// This is a special value for the short format only, as described in
+// "Design for compressed header format" in draft doc.
 const uint32_t kShortFlagsContinue = 3;
 
 struct Point {
@@ -174,10 +177,7 @@ size_t Store16(uint8_t* dst, size_t offset, int x) {
 }
 
 int WithSign(int flag, int baseval) {
-  // agl: it isn't generally possible to negate an arbitary integer. (For
-  // example, -2137483648 cannot be negated.) However, I believe that the range
-  // is 0 <= baseval < 65536 in which case it's safe. If you agree then there
-  // should be a comment documenting the precondition of this function.
+  // Precondition: 0 <= baseval < 65536 (to avoid integer overflow)
   return (flag & 1) ? baseval : -baseval;
 }
 
@@ -237,7 +237,7 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
           (in[triplet_index + 2] << 8) + in[triplet_index + 3]);
     }
     triplet_index += n_data_bytes;
-    // agl: these additions can overflow, although I'm not sure that we care.
+    // Possible overflow but coordinate values are not security sensitive
     x += dx;
     y += dy;
     result->push_back(Point());
@@ -315,10 +315,10 @@ bool StorePoints(const std::vector<Point>& points,
     }
     dst[flag_offset++] = repeat_count;
   }
-  // agl: overflow checks can't have multiple additions in them.
-  if (flag_offset + x_bytes < flag_offset ||
-      flag_offset + x_bytes + y_bytes < flag_offset + x_bytes ||
-      flag_offset + x_bytes + y_bytes > dst_size) {
+  unsigned int xy_bytes = x_bytes + y_bytes;
+  if (xy_bytes < x_bytes ||
+      flag_offset + xy_bytes < flag_offset ||
+      flag_offset + xy_bytes > dst_size) {
     return OTS_FAILURE();
   }
 
@@ -333,8 +333,7 @@ bool StorePoints(const std::vector<Point>& points,
     } else if (dx > -256 && dx < 256) {
       dst[x_offset++] = std::abs(dx);
     } else {
-      // agl: this can go wrong if dx doesn't fit in an int16_t, but it's not
-      // clear if that matters.
+      // will always fit for valid input, but overflow is harmless
       x_offset = Store16(dst, x_offset, dx);
     }
     last_x += dx;
@@ -381,8 +380,10 @@ bool ProcessBboxStream(ots::Buffer* bbox_stream, unsigned int n_glyphs,
     const std::vector<uint32_t>& loca_values, uint8_t* glyf_buf,
     size_t glyf_buf_length) {
   const uint8_t* buf = bbox_stream->buffer();
-  // agl: I belive that n_glyphs is < 65536, making the next line safe. But a
-  // comment and/or assert is needed to document that.
+  if (n_glyphs >= 65536 || loca_values.size() != n_glyphs + 1) {
+    return OTS_FAILURE();
+  }
+  // Safe because n_glyphs is bounded
   unsigned int bitmap_length = ((n_glyphs + 31) >> 5) << 2;
   if (!bbox_stream->Skip(bitmap_length)) {
     return OTS_FAILURE();
@@ -390,8 +391,6 @@ bool ProcessBboxStream(ots::Buffer* bbox_stream, unsigned int n_glyphs,
   for (unsigned int i = 0; i < n_glyphs; ++i) {
     if (buf[i >> 3] & (0x80 >> (i & 7))) {
       uint32_t loca_offset = loca_values[i];
-      // agl: again, I believe that this is safe, but the fact that loca_values
-      // has n_glyphs+1 elements should be documented.
       if (loca_values[i + 1] - loca_offset < kEndPtsOfContoursOffset) {
         return OTS_FAILURE();
       }
@@ -490,11 +489,10 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
     return OTS_FAILURE();
   }
   unsigned int offset = (2 + kNumSubStreams) * 4;
-  // agl: data_size must be >= offset, but this condition isn't established
-  // initially.
   if (offset > data_size) {
     return OTS_FAILURE();
   }
+  // Invariant from here on: data_size >= offset
   for (int i = 0; i < kNumSubStreams; ++i) {
     uint32_t substream_size;
     if (!file.ReadU32(&substream_size)) {
@@ -588,7 +586,9 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
       int end_point = -1;
       for (unsigned int contour_ix = 0; contour_ix < n_contours; ++contour_ix) {
         end_point += n_points_vec[contour_ix];
-        // agl: this fails if end_point > 65535, does that matter?
+        if (end_point >= 65536) {
+          return OTS_FAILURE();
+        }
         offset = Store16(glyf_dst, offset, end_point);
       }
       if (!flag_stream.Skip(flag_size)) {
@@ -685,10 +685,7 @@ bool ReconstructTransformed(const std::vector<Table>& tables, uint32_t tag,
 uint32_t ComputeChecksum(const uint8_t* buf, size_t size) {
   uint32_t checksum = 0;
   for (size_t i = 0; i < size; i += 4) {
-    // We assume the addition is mod 2^32. This is a pretty safe assumption,
-    // but technically it's undefined behavior.
-    // agl: in reference to the comment above: when using uint32_t, the fact
-    // that addition is mod 2^32 is well defined.
+    // We assume the addition is mod 2^32, which is valid because unsigned
     checksum += (buf[i] << 24) | (buf[i + 1] << 16) |
       (buf[i + 2] << 8) | buf[i + 3];
   }
@@ -726,8 +723,7 @@ bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,
     uLongf uncompressed_length = dst_size;
     int r = uncompress(reinterpret_cast<Bytef *>(dst_buf), &uncompressed_length,
         src_buf, src_size);
-    // agl: I think src_size should be dst_size in the next line.
-    if (r != Z_OK || uncompressed_length != src_size) {
+    if (r != Z_OK || uncompressed_length != dst_size) {
       return OTS_FAILURE();
     }
     return true;
