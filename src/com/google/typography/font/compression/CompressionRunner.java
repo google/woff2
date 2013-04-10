@@ -195,19 +195,6 @@ public class CompressionRunner {
     return result;
   }
 
-  // This is currently implemented by shelling out to a command line helper,
-  // which is fine for research purposes, but obviously problematic for
-  // production.
-  private static byte[] compressBzip2(byte[] input) {
-    try {
-      String[] args = {"/bin/bzip2"};
-      CommandResult result = new Command(args).execute(input);
-      return result.getStdout();
-    } catch (CommandException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   /**
    * Does one experimental compression on a font, using the string to guide what
    * gets done.
@@ -267,8 +254,6 @@ public class CompressionRunner {
       result = GzipUtil.deflate(fontToBytes(fontFactory, font));
     } else if (lastBase.equals("lzma")) {
       result = CompressLzma.compress(fontToBytes(fontFactory, font));
-    } else if (lastBase.equals("bzip2")) {
-      result = compressBzip2(fontToBytes(fontFactory, font));
     } else if (lastBase.equals("woff")) {
       result = toBytes(new WoffWriter().convert(font));
     } else if (lastBase.equals("woff2")) {
