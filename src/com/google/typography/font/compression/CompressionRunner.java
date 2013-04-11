@@ -65,7 +65,7 @@ public class CompressionRunner {
     // String baseline = "glyf/cbbox,triplet,code,push:hdmx:lzma";
     // descs.add("woff2");
     if (descs.isEmpty()) {
-      descs.add("glyf/cbbox,triplet,code,reslice:woff2");
+      descs.add("glyf/cbbox,triplet,code,reslice:woff2/lzma");
     }
     runTest(filenames, baseline, descs, generateOutput);
   }
