@@ -16,6 +16,7 @@ import java.util.List;
  * @author raph@google.com (Raph Levien)
  */
 public class StatsCollector {
+
   private final List<Double> values;
 
   public StatsCollector() {

@@ -21,10 +21,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * @author Raph Levien
- *
  * Implementation of compression of CTF glyph data, as per sections 5.6-5.10 and 6 of the spec.
  * This is a hacked-up version with a number of options, for experimenting.
+ *
+ * @author Raph Levien
  */
 public class GlyfEncoder {
 

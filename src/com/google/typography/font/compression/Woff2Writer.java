@@ -15,7 +15,11 @@ import com.google.typography.font.sfntly.table.core.FontHeaderTable;
 import java.util.List;
 import java.util.TreeSet;
 
+/**
+ * @author raph@google.com (Raph Levien)
+ */
 public class Woff2Writer {
+
   private static final long SIGNATURE = 0x774f4632;
   private static final int WOFF2_HEADER_SIZE = 44;
   private static final int TABLE_ENTRY_SIZE = 5 * 4;
@@ -25,7 +29,7 @@ public class Woff2Writer {
   private final CompressionType compressionType;
   private final boolean longForm;
 
-  Woff2Writer(String args) {
+  public Woff2Writer(String args) {
     CompressionType compressionType = CompressionType.NONE;
     boolean longForm = false;
     for (String arg : args.split(",")) {
@@ -85,7 +89,7 @@ public class Woff2Writer {
       .put(Tag.intValue(new byte[] {'G', 'S', 'U', 'B'}), 28)
       .build();
 
-  public WritableFontData convert(Font srcFont, Font font) {
+  public WritableFontData convert(Font font) {
     List<TableDirectoryEntry> entries = createTableDirectoryEntries(font);
     int size = computeCompressedFontSize(entries);
     WritableFontData writableFontData = WritableFontData.createWritableFontData(size);

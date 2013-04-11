@@ -17,11 +17,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * @author raph@google.com (Raph Levien)
- *
  * Experimental CMap encoder, based primarily on writing the _inverse_ encoding.
+ *
+ * @author raph@google.com (Raph Levien)
  */
 public class CmapEncoder {
+
   public static byte[] encode(Font font) {
     int nGlyphs = font.<MaximumProfileTable>getTable(Tag.maxp).numGlyphs();
     CMapTable cmapTable = font.getTable(Tag.cmap);

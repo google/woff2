@@ -257,7 +257,7 @@ public class CompressionRunner {
     } else if (lastBase.equals("woff")) {
       result = toBytes(new WoffWriter().convert(font));
     } else if (lastBase.equals("woff2")) {
-      result = toBytes(new Woff2Writer(lastArgs).convert(srcFont, font));
+      result = toBytes(new Woff2Writer(lastArgs).convert(font));
     } else if (lastBase.equals("eot")) {
       result = toBytes(new EOTWriter(true).convert(font));
     } else if (lastBase.equals("uncomp")) {

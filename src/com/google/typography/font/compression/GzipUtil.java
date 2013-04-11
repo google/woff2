@@ -11,8 +11,11 @@ import java.util.zip.DeflaterOutputStream;
 
 /**
  * Simple utility for GZIP compression
+ *
+ * @author Raph Levien
  */
 public class GzipUtil {
+
   public static byte[] deflate(byte[] bytes) {
     try {
       ByteArrayOutputStream baos = new ByteArrayOutputStream();

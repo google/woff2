@@ -11,13 +11,14 @@ import com.google.typography.font.sfntly.data.WritableFontData;
 import com.google.typography.font.sfntly.table.Table;
 
 /**
- * @author raph@google.com (Raph Levien)
- *
  * Encoder for "kern" table. This probably won't go in the spec because an even more
  * effective technique would be to do class kerning in the GDEF tables, but, even so, I wanted
  * to capture the stats.
+ *
+ * @author raph@google.com (Raph Levien)
  */
 public class KernEncoder {
+
   public static WritableFontData encode(Font font) {
     Table kernTable = font.getTable(Tag.kern);
     ReadableFontData data = kernTable.readFontData();

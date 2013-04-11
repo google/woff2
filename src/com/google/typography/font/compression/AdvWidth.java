@@ -15,6 +15,7 @@ import com.google.typography.font.sfntly.table.core.HorizontalMetricsTable;
  * @author raph@google.com (Raph Levien)
  */
 public class AdvWidth {
+
   public static WritableFontData encode(Font font) {
     HorizontalMetricsTable hmtx = font.getTable(Tag.hmtx);
     int nMetrics = hmtx.numberOfHMetrics();
