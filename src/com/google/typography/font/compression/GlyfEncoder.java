@@ -447,9 +447,9 @@ public class GlyfEncoder {
         writeLong(newStream, compositeStream.size());
         writeLong(newStream, bboxBitmap.length + bboxStream.size());
         writeLong(newStream, codeStream.size());
-        System.out.printf("stream sizes = %d %d %d %d %d %d %d\n",
-            nContourStream.size(), nPointsStream.size(), flagBytesStream.size(), glyfStream.size(),
-            compositeStream.size(), bboxStream.size(), codeStream.size());
+//        System.out.printf("stream sizes = %d %d %d %d %d %d %d\n",
+//            nContourStream.size(), nPointsStream.size(), flagBytesStream.size(), glyfStream.size(),
+//            compositeStream.size(), bboxStream.size(), codeStream.size());
         nContourStream.writeTo(newStream);
         nPointsStream.writeTo(newStream);
         flagBytesStream.writeTo(newStream);

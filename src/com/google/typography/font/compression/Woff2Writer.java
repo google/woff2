@@ -97,11 +97,11 @@ public class Woff2Writer {
     FontHeaderTable head = font.getTable(Tag.head);
     index += writeWoff2Header(writableFontData, entries, font.sfntVersion(), size,
         head.fontRevision());
-    System.out.printf("Wrote header, index = %d\n", index);
+//    System.out.printf("Wrote header, index = %d\n", index);
     index += writeDirectory(writableFontData, index, entries);
-    System.out.printf("Wrote directory, index = %d\n", index);
+//    System.out.printf("Wrote directory, index = %d\n", index);
     index += writeTables(writableFontData, index, entries);
-    System.out.printf("Wrote tables, index = %d\n", index);
+//    System.out.printf("Wrote tables, index = %d\n", index);
     return writableFontData;
   }
 
@@ -327,7 +327,7 @@ public class Woff2Writer {
           flag_byte |= (flags & 3) << 6;
         }
         if (writableFontData != null) {
-          System.out.printf("%d: tag = %08x, flag = %02x\n", offset, tag, flag_byte);
+//          System.out.printf("%d: tag = %08x, flag = %02x\n", offset, tag, flag_byte);
           writableFontData.writeByte(offset, (byte)flag_byte);
         }
         offset += 1;
