@@ -9,7 +9,8 @@ import java.io.IOException;
 import SevenZip.Compression.LZMA.Encoder;
 
 /**
- * @author raph@google.com (Raph Levien)
+ * @author Raph Levien
+ * @author David Kuettel
  */
 public class CompressLzma {
 

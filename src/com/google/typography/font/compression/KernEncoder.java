@@ -15,7 +15,7 @@ import com.google.typography.font.sfntly.table.Table;
  * effective technique would be to do class kerning in the GDEF tables, but, even so, I wanted
  * to capture the stats.
  *
- * @author raph@google.com (Raph Levien)
+ * @author Raph Levien
  */
 public class KernEncoder {
 

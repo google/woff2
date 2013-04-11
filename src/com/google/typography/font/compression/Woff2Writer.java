@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.TreeSet;
 
 /**
- * @author raph@google.com (Raph Levien)
+ * @author Raph Levien
  */
 public class Woff2Writer {
 

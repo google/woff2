@@ -13,7 +13,7 @@ import java.util.List;
 /**
  * Class for gathering up stats, for summarizing and graphing.
  *
- * @author raph@google.com (Raph Levien)
+ * @author Raph Levien
  */
 public class StatsCollector {
 

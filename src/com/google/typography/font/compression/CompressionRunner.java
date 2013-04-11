@@ -34,7 +34,7 @@ import java.util.Set;
  * shell out to helper binaries, which is fine for the purposes of gathering
  * statistics, but obviously not much else.
  *
- * @author raph@google.com (Raph Levien)
+ * @author Raph Levien
  */
 public class CompressionRunner {
   // private static final boolean DEBUG = false;

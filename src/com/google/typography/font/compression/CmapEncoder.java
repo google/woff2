@@ -19,7 +19,7 @@ import java.util.Map;
 /**
  * Experimental CMap encoder, based primarily on writing the _inverse_ encoding.
  *
- * @author raph@google.com (Raph Levien)
+ * @author Raph Levien
  */
 public class CmapEncoder {
 

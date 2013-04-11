@@ -12,7 +12,7 @@ import com.google.typography.font.sfntly.table.core.HorizontalMetricsTable;
 /**
  * Extract just advance widths from hmtx table.
  *
- * @author raph@google.com (Raph Levien)
+ * @author Raph Levien
  */
 public class AdvWidth {
 
