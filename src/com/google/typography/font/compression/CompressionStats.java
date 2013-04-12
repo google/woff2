@@ -72,6 +72,12 @@ public class CompressionStats {
       return sizes.get(size);
     }
 
+    public double getPercent(Size s1, Size s2) {
+      long v1 = sizes.get(s1);
+      long v2 = sizes.get(s2);
+      return 100.0 * (v1 - v2) / v1;
+    }
+
     public static Builder builder() {
       return new Builder();
     }

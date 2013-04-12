@@ -17,13 +17,14 @@ public class CsvReport {
   public static void create(CompressionStats stats, String filename) throws IOException {
     PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(filename)));
     try {
-      writer.printf("Font, Original, GZIP, WOFF 2.0\n");
+      writer.printf("'Font', 'Original (bytes)', 'GZIP (bytes)', 'WOFF 2.0 (bytes)', '%% Improvement'\n");
       for (CompressionStats.Stats stat : stats.values()) {
-        writer.printf("%s, %d, %d, %d\n",
+        writer.printf("%s, %d, %d, %d, %.2f%%\n",
             stat.getFilename(),
             stat.getSize(CompressionStats.Size.ORIGINAL),
             stat.getSize(CompressionStats.Size.GZIP),
-            stat.getSize(CompressionStats.Size.WOFF2));
+            stat.getSize(CompressionStats.Size.WOFF2),
+            stat.getPercent(CompressionStats.Size.GZIP, CompressionStats.Size.WOFF2));
       }
     } finally {
       Closeables.closeQuietly(writer);
