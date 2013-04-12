@@ -11,10 +11,6 @@ done, and the exact format of that bytestream is subject to change.
 == Building the tool ==
 
 On a standard Unix-style environment, it should be as simple as running “ant”.
-A couple of paths to compression subprocesses are hardcoded in
-CompressionRunner.java, namely “usr/bin/lzma” and “/bin/bzip2”. These are the
-default locations in Ubuntu, but if they’re elsewhere on your system, you’ll
-need to change that.
 
 The tool depends on sfntly for much of the font work. The lib/ directory
 contains a snapshot jar. If you want to use the latest sfntly sources, then cd
