@@ -36,20 +36,25 @@ public class SimpleRunner {
 
   private static void run(CompressionStats stats, String[] filenames) throws IOException {
     for (String filename : filenames) {
-      File file = new File(filename);
-      byte[] bytes = Files.toByteArray(file);
-      Font font = FONT_FACTORY.loadFonts(bytes)[0];
+      try {
+        File file = new File(filename);
+        byte[] bytes = Files.toByteArray(file);
+        Font font = FONT_FACTORY.loadFonts(bytes)[0];
 
-      byte[] gzip = Experiment.run(font, GZIP);
-      byte[] woff2 = Experiment.run(font, WOFF2);
+        byte[] gzip = Experiment.run(font, GZIP);
+        byte[] woff2 = Experiment.run(font, WOFF2);
 
-      stats.add(
-          CompressionStats.Stats.builder()
-              .setFilename(file.getName())
-              .setSize(CompressionStats.Size.ORIGINAL, bytes.length)
-              .setSize(CompressionStats.Size.GZIP, gzip.length)
-              .setSize(CompressionStats.Size.WOFF2, woff2.length)
-              .build());
+        stats.add(
+            CompressionStats.Stats.builder()
+            .setFilename(file.getName())
+            .setSize(CompressionStats.Size.ORIGINAL, bytes.length)
+            .setSize(CompressionStats.Size.GZIP, gzip.length)
+            .setSize(CompressionStats.Size.WOFF2, woff2.length)
+            .build());
+      } catch (Throwable t) {
+        System.err.printf("WARNING: failed to compress: %s\n", filename);
+        t.printStackTrace();
+      }
     }
   }
 
