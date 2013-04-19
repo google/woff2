@@ -3,6 +3,9 @@ package com.google.typography.font.compression;
 import com.google.common.io.Files;
 import com.google.typography.font.sfntly.Font;
 import com.google.typography.font.sfntly.FontFactory;
+import com.google.typography.font.sfntly.Tag;
+import com.google.typography.font.sfntly.table.truetype.GlyphTable;
+import com.google.typography.font.sfntly.table.truetype.LocaTable;
 
 import java.io.File;
 import java.io.IOException;
@@ -41,6 +44,11 @@ public class SimpleRunner {
         byte[] bytes = Files.toByteArray(file);
         Font font = FONT_FACTORY.loadFonts(bytes)[0];
 
+        if (!isTrueType(font)) {
+          System.err.printf("WARNING: unable to compress: %s (not a TrueType font)\n", filename);
+          continue;
+        }
+
         byte[] gzip = Experiment.run(font, GZIP);
         byte[] woff2 = Experiment.run(font, WOFF2);
 
@@ -56,6 +64,12 @@ public class SimpleRunner {
         t.printStackTrace();
       }
     }
+  }
+
+  private static boolean isTrueType(Font font) {
+    LocaTable loca = font.getTable(Tag.loca);
+    GlyphTable glyf = font.getTable(Tag.glyf);
+    return (loca != null && glyf != null);
   }
 
   private static void usage() {
