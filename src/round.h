@@ -30,6 +30,13 @@ template<typename T> T Round4(T value) {
   return (value + 3) & ~3;
 }
 
+template<typename T> T Round2(T value) {
+  if (value == std::numeric_limits<T>::max()) {
+    return value;
+  }
+  return (value + 1) & ~1;
+}
+
 } // namespace woff2
 
 #endif  // WOFF2_ROUND_H_
