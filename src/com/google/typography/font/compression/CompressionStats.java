@@ -15,7 +15,7 @@ import java.util.Map;
  */
 public class CompressionStats {
 
-  public enum Size { ORIGINAL, GZIP, WOFF2 }
+  public enum Size { ORIGINAL, GZIP, WOFF, WOFF2 }
 
   private final List<Stats> values = Lists.newArrayList();
 

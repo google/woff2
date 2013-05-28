@@ -19,7 +19,7 @@ public class SimpleRunner {
 
   private static final FontFactory FONT_FACTORY = FontFactory.getInstance();
 
-  private static final String GZIP = "gzip";
+  private static final String WOFF = "woff";
   private static final String WOFF2 = "woff2/lzma";
 
   private static final String TRUETYPE = "glyf/cbbox,triplet,code,reslice";
@@ -47,13 +47,13 @@ public class SimpleRunner {
         byte[] bytes = Files.toByteArray(file);
         Font font = FONT_FACTORY.loadFonts(bytes)[0];
 
-        byte[] gzip = Experiment.run(font, GZIP);
+        byte[] woff = Experiment.run(font, WOFF);
         byte[] woff2 = Experiment.run(font, getOptions(font));
 
         CompressionStats.Stats stat = CompressionStats.Stats.builder()
             .setFilename(file.getName())
             .setSize(CompressionStats.Size.ORIGINAL, bytes.length)
-            .setSize(CompressionStats.Size.GZIP, gzip.length)
+            .setSize(CompressionStats.Size.WOFF, woff.length)
             .setSize(CompressionStats.Size.WOFF2, woff2.length)
             .build();
         stats.add(stat);
@@ -61,9 +61,9 @@ public class SimpleRunner {
         System.out.printf("> %s, %d, %d, %d, %.2f%%\n",
             stat.getFilename(),
             stat.getSize(CompressionStats.Size.ORIGINAL),
-            stat.getSize(CompressionStats.Size.GZIP),
+            stat.getSize(CompressionStats.Size.WOFF),
             stat.getSize(CompressionStats.Size.WOFF2),
-            stat.getPercent(CompressionStats.Size.GZIP, CompressionStats.Size.WOFF2));
+            stat.getPercent(CompressionStats.Size.WOFF, CompressionStats.Size.WOFF2));
 
       } catch (Throwable t) {
         System.err.printf("WARNING: failed to compress: %s\n", filename);
