@@ -20,7 +20,10 @@ public class SimpleRunner {
   private static final FontFactory FONT_FACTORY = FontFactory.getInstance();
 
   private static final String GZIP = "gzip";
-  private static final String WOFF2 = "glyf/cbbox,triplet,code,reslice:woff2/lzma";
+  private static final String WOFF2 = "woff2/lzma";
+
+  private static final String TRUETYPE = "glyf/cbbox,triplet,code,reslice";
+  private static final String CFF = "";
 
   private static final String REPORT = "report.csv";
 
@@ -44,21 +47,24 @@ public class SimpleRunner {
         byte[] bytes = Files.toByteArray(file);
         Font font = FONT_FACTORY.loadFonts(bytes)[0];
 
-        if (!isTrueType(font)) {
-          System.err.printf("WARNING: unable to compress: %s (not a TrueType font)\n", filename);
-          continue;
-        }
-
         byte[] gzip = Experiment.run(font, GZIP);
-        byte[] woff2 = Experiment.run(font, WOFF2);
+        byte[] woff2 = Experiment.run(font, getOptions(font));
 
-        stats.add(
-            CompressionStats.Stats.builder()
+        CompressionStats.Stats stat = CompressionStats.Stats.builder()
             .setFilename(file.getName())
             .setSize(CompressionStats.Size.ORIGINAL, bytes.length)
             .setSize(CompressionStats.Size.GZIP, gzip.length)
             .setSize(CompressionStats.Size.WOFF2, woff2.length)
-            .build());
+            .build();
+        stats.add(stat);
+
+        System.out.printf("> %s, %d, %d, %d, %.2f%%\n",
+            stat.getFilename(),
+            stat.getSize(CompressionStats.Size.ORIGINAL),
+            stat.getSize(CompressionStats.Size.GZIP),
+            stat.getSize(CompressionStats.Size.WOFF2),
+            stat.getPercent(CompressionStats.Size.GZIP, CompressionStats.Size.WOFF2));
+
       } catch (Throwable t) {
         System.err.printf("WARNING: failed to compress: %s\n", filename);
         t.printStackTrace();
@@ -70,6 +76,10 @@ public class SimpleRunner {
     LocaTable loca = font.getTable(Tag.loca);
     GlyphTable glyf = font.getTable(Tag.glyf);
     return (loca != null && glyf != null);
+  }
+
+  private static String getOptions(Font font) {
+    return String.format("%s:%s", (isTrueType(font)) ? TRUETYPE : CFF, WOFF2);
   }
 
   private static void usage() {
