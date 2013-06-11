@@ -65,6 +65,9 @@ public class SimpleRunner {
             stat.getSize(CompressionStats.Size.WOFF2),
             stat.getPercent(CompressionStats.Size.WOFF, CompressionStats.Size.WOFF2));
 
+        String target = filename.replaceAll("[.](ttf|otf)", ".woff2");
+        Files.write(woff2, new File(target));
+
       } catch (Throwable t) {
         System.err.printf("WARNING: failed to compress: %s\n", filename);
         t.printStackTrace();
