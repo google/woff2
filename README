@@ -1,5 +1,14 @@
-﻿This is a README for the font compression reference code. It’s very rough in
-this snapshot, but will be cleaned up some for public release.
+﻿This is a README for the font compression reference code. There are several
+compression related modules in this repository.
+
+brotli/ contains reference code for the Brotli byte-level compression
+algorithm. Note that it is licensed under an Apache 2 license.
+
+src/ contains prototype Java code for compressing fonts.
+
+cpp/ contains prototype C++ code for decompressing fonts.
+
+docs/ contains documents describing the proposed compression format.
 
 = How to run the compression test tool =
 
@@ -145,7 +154,7 @@ http://www.w3.org/Submission/MTX/
 Also please refer to documents (currently Google Docs):
 
 WOFF Ultra Condensed file format: proposals and discussion of wire format
-issues
+issues (PDF is in docs/ directory)
 
 WIFF Ultra Condensed: more discussion of results and compression techniques.
 This tool was used to prepare the data in that document.
