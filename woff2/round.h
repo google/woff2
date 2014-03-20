@@ -14,8 +14,8 @@
 //
 // Helper for rounding
 
-#ifndef BROTLI_WOFF2_ROUND_H_
-#define BROTLI_WOFF2_ROUND_H_
+#ifndef WOFF2_ROUND_H_
+#define WOFF2_ROUND_H_
 
 namespace woff2 {
 
@@ -30,4 +30,4 @@ template<typename T> T Round4(T value) {
 
 } // namespace woff2
 
-#endif  // BROTLI_WOFF2_ROUND_H_
+#endif  // WOFF2_ROUND_H_

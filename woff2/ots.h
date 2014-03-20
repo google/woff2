@@ -15,8 +15,8 @@
 // The parts of ots.h & opentype-sanitiser.h that we need, taken from the
 // https://code.google.com/p/ots/ project.
 
-#ifndef BROTLI_WOFF2_OTS_H_
-#define BROTLI_WOFF2_OTS_H_
+#ifndef WOFF2_OTS_H_
+#define WOFF2_OTS_H_
 
 #include <stdint.h>
 #include <arpa/inet.h>
@@ -150,4 +150,4 @@ class Buffer {
 
 }  // namespace ots
 
-#endif  // BROTLI_WOFF2_OTS_H_
+#endif  // WOFF2_OTS_H_

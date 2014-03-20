@@ -14,8 +14,8 @@
 //
 // Library for converting WOFF2 format font files to their TTF versions.
 
-#ifndef BROTLI_WOFF2_WOFF2_H_
-#define BROTLI_WOFF2_WOFF2_H_
+#ifndef WOFF2_WOFF2_H_
+#define WOFF2_WOFF2_H_
 
 #include <stddef.h>
 #include <inttypes.h>
@@ -47,4 +47,4 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
 
 } // namespace woff2
 
-#endif  // BROTLI_WOFF2_WOFF2_H_
+#endif  // WOFF2_WOFF2_H_

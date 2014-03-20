@@ -40,7 +40,6 @@ using std::string;
 using std::vector;
 
 
-
 // simple glyph flags
 const int kGlyfOnCurve = 1 << 0;
 const int kGlyfXShort = 1 << 1;
@@ -88,9 +87,7 @@ const size_t kLzmaHeaderSize = 13;
 const uint32_t kCompressionTypeMask = 0xf;
 const uint32_t kCompressionTypeNone = 0;
 const uint32_t kCompressionTypeGzip = 1;
-const uint32_t kCompressionTypeLzma = 2;
-const uint32_t kCompressionTypeBrotli = 3;
-const uint32_t kCompressionTypeLzham = 4;
+const uint32_t kCompressionTypeBrotli = 2;
 
 // This is a special value for the short format only, as described in
 // "Design for compressed header format" in draft doc.
@@ -736,8 +733,9 @@ bool Woff2Compress(const uint8_t* data, const size_t len,
                    uint8_t* result, uint32_t* result_len) {
   if (compression_type == kCompressionTypeBrotli) {
     size_t compressed_len = *result_len;
-    
-    brotli::BrotliCompressBuffer(len, data, &compressed_len, result);
+    brotli::BrotliParams params;
+    params.mode = brotli::BrotliParams::MODE_FONT;
+    brotli::BrotliCompressBuffer(params, len, data, &compressed_len, result);
     *result_len = compressed_len;
     return true;
   }
@@ -839,7 +837,7 @@ bool ReadShortDirectory(ots::Buffer* file, std::vector<Table>* tables,
     } else {
       if (flags == kCompressionTypeNone ||
           flags == kCompressionTypeGzip ||
-          flags == kCompressionTypeLzma) {
+          flags == kCompressionTypeBrotli) {
         last_compression_type = flags;
       } else {
         return OTS_FAILURE();
@@ -911,19 +909,13 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   if (!file.ReadU16(&num_tables) || !num_tables) {
     return OTS_FAILURE();
   }
-  // These reserved bits will be always zero in the final format, but they
-  // temporarily indicate the use of brotli, so that we can evaluate gzip, lzma
-  // and brotli side-by-side.
-  uint16_t reserved;
-  if (!file.ReadU16(&reserved)) {
-    return OTS_FAILURE();
-  }
   // We don't care about these fields of the header:
+  //   uint16_t reserved
   //   uint32_t total_sfnt_size
   //   uint16_t major_version, minor_version
   //   uint32_t meta_offset, meta_length, meta_orig_length
   //   uint32_t priv_offset, priv_length
-  if (!file.Skip(28)) {
+  if (!file.Skip(30)) {
     return OTS_FAILURE();
   }
   std::vector<Table> tables(num_tables);
@@ -996,9 +988,6 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     uint32_t flags = table->flags;
     const uint8_t* src_buf = data + table->src_offset;
     uint32_t compression_type = flags & kCompressionTypeMask;
-    if (compression_type == kCompressionTypeLzma && reserved > 0) {
-      compression_type = kCompressionTypeLzma + reserved;
-    }
     size_t transform_length = table->transform_length;
     if ((flags & kWoff2FlagsContinueStream) != 0) {
       if (!continue_valid) {
@@ -1090,7 +1079,7 @@ size_t TableEntrySize(const Table& table) {
   }
   if ((table.flags & kWoff2FlagsContinueStream) == 0 &&
       ((table.flags & 3) == kCompressionTypeGzip ||
-       (table.flags & 3) == kCompressionTypeLzma)) {
+       (table.flags & 3) == kCompressionTypeBrotli)) {
     size += Base128Size(table.dst_length);
   }
   return size;
@@ -1226,7 +1215,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     }
     Table table;
     table.tag = src_table.tag;
-    table.flags = std::min(options.compression_type, kCompressionTypeLzma);
+    table.flags = options.compression_type;
     table.src_length = src_table.length;
     table.transform_length = src_table.length;
     const uint8_t* transformed_data = src_table.data;
@@ -1278,16 +1267,13 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     return false;
   }
   *result_length = woff2_length;
-  uint16_t reserved =
-      (options.compression_type > kCompressionTypeLzma) ?
-      options.compression_type - kCompressionTypeLzma : 0;
 
   size_t offset = 0;
   StoreU32(kWoff2Signature, &offset, result);
   StoreU32(font.flavor, &offset, result);
   StoreU32(woff2_length, &offset, result);
   Store16(tables.size(), &offset, result);
-  Store16(reserved, &offset, result);
+  Store16(0, &offset, result);  // reserved
   StoreU32(ComputeTTFLength(tables), &offset, result);
   StoreBytes(head_table->data + 4, 4, &offset, result);  // font revision
   StoreU32(0, &offset, result);  // metaOffset

@@ -15,8 +15,8 @@
 // Helper functions for storing integer values into byte streams.
 // No bounds checking is performed, that is the responsibility of the caller.
 
-#ifndef BROTLI_WOFF2_STORE_BYTES_H_
-#define BROTLI_WOFF2_STORE_BYTES_H_
+#ifndef WOFF2_STORE_BYTES_H_
+#define WOFF2_STORE_BYTES_H_
 
 #include <inttypes.h>
 #include <stddef.h>
@@ -58,4 +58,4 @@ inline void StoreBytes(const uint8_t* data, size_t len,
 
 } // namespace woff2
 
-#endif  // BROTLI_WOFF2_STORE_BYTES_H_
+#endif  // WOFF2_STORE_BYTES_H_

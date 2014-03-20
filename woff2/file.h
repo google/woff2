@@ -14,8 +14,8 @@
 //
 // File IO helpers
 
-#ifndef BROTLI_WOFF2_FILE_H_
-#define BROTLI_WOFF2_FILE_H_
+#ifndef WOFF2_FILE_H_
+#define WOFF2_FILE_H_
 
 #include <fstream>
 #include <iterator>
@@ -37,4 +37,4 @@ inline void SetFileContents(std::string filename, std::string content) {
 }
 
 } // namespace woff2
-#endif   //  BROTLI_WOFF2_FILE_H_
+#endif  // WOFF2_FILE_H_

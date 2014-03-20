@@ -15,8 +15,8 @@
 // Data model and I/O for glyph data within sfnt format files for the purpose of
 // performing the preprocessing step of the WOFF 2.0 conversion.
 
-#ifndef BROTLI_WOFF2_GLYPH_H_
-#define BROTLI_WOFF2_GLYPH_H_
+#ifndef WOFF2_GLYPH_H_
+#define WOFF2_GLYPH_H_
 
 #include <stddef.h>
 #include <inttypes.h>
@@ -68,4 +68,4 @@ bool StoreGlyph(const Glyph& glyph, uint8_t* dst, size_t* dst_size);
 
 } // namespace woff2
 
-#endif  // BROTLI_WOFF2_GLYPH_H_
+#endif  // WOFF2_GLYPH_H_

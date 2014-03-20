@@ -14,8 +14,8 @@
 //
 // Library for preprocessing fonts as part of the WOFF 2.0 conversion.
 
-#ifndef BROTLI_WOFF2_TRANSFORM_H_
-#define BROTLI_WOFF2_TRANSFORM_H_
+#ifndef WOFF2_TOOLS_TRANSFORM_H_
+#define WOFF2_TOOLS_TRANSFORM_H_
 
 #include "./font.h"
 
@@ -28,4 +28,4 @@ bool TransformGlyfAndLocaTables(Font* font);
 
 } // namespace woff2
 
-#endif  // BROTLI_WOFF2_TRANSFORM_H_
+#endif  // WOFF2_TRANSFORM_H_

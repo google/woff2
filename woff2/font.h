@@ -15,8 +15,8 @@
 // Data model for a font file in sfnt format, reading and writing functions and
 // accessors for the glyph data.
 
-#ifndef BROTLI_WOFF2_FONT_H_
-#define BROTLI_WOFF2_FONT_H_
+#ifndef WOFF2_FONT_H_
+#define WOFF2_FONT_H_
 
 #include <stddef.h>
 #include <inttypes.h>
@@ -78,4 +78,4 @@ bool GetGlyphData(const Font& font, int glyph_index,
 
 } // namespace woff2
 
-#endif  // BROTLI_WOFF2_FONT_H_
+#endif  // WOFF2_FONT_H_

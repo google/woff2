@@ -14,8 +14,8 @@
 //
 // Helper function for bit twiddling
 
-#ifndef BROTLI_WOFF2_PORT_H_
-#define BROTLI_WOFF2_PORT_H_
+#ifndef WOFF2_PORT_H_
+#define WOFF2_PORT_H_
 
 namespace woff2 {
 
@@ -43,4 +43,4 @@ inline int Log2Floor(uint32 n) {
 }
 
 } // namespace woff2
-#endif  // BROTLI_WOFF2_PORT_H_
+#endif  // WOFF2_PORT_H_

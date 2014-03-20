@@ -16,8 +16,8 @@
 // files in normalized form, the WOFF 2.0 conversion is guaranteed to be
 // lossless (in a bitwise sense) only for normalized font files.
 
-#ifndef BROTLI_WOFF2_NORMALIZE_H_
-#define BROTLI_WOFF2_NORMALIZE_H_
+#ifndef WOFF2_NORMALIZE_H_
+#define WOFF2_NORMALIZE_H_
 
 namespace woff2 {
 
@@ -42,4 +42,4 @@ bool NormalizeFont(Font* font);
 
 } // namespace woff2
 
-#endif  // BROTLI_WOFF2_NORMALIZE_H_
+#endif  // WOFF2_NORMALIZE_H_
