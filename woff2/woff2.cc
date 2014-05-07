@@ -81,14 +81,6 @@ const unsigned int kWoff2FlagsTransform = 1 << 5;
 const size_t kWoff2HeaderSize = 48;
 const size_t kWoff2EntrySize = 20;
 
-const size_t kLzmaHeaderSize = 13;
-
-// Compression type values common to both short and long formats
-const uint32_t kCompressionTypeMask = 0xf;
-const uint32_t kCompressionTypeNone = 0;
-const uint32_t kCompressionTypeGzip = 1;
-const uint32_t kCompressionTypeBrotli = 2;
-
 // This is a special value for the short format only, as described in
 // "Design for compressed header format" in draft doc.
 const uint32_t kShortFlagsContinue = 3;
@@ -729,32 +721,24 @@ bool FixChecksums(const std::vector<Table>& tables, uint8_t* dst) {
 }
 
 bool Woff2Compress(const uint8_t* data, const size_t len,
-                   uint32_t compression_type,
                    uint8_t* result, uint32_t* result_len) {
-  if (compression_type == kCompressionTypeBrotli) {
-    size_t compressed_len = *result_len;
-    brotli::BrotliParams params;
-    params.mode = brotli::BrotliParams::MODE_FONT;
-    brotli::BrotliCompressBuffer(params, len, data, &compressed_len, result);
-    *result_len = compressed_len;
-    return true;
-  }
-  return false;
+  size_t compressed_len = *result_len;
+  brotli::BrotliParams params;
+  params.mode = brotli::BrotliParams::MODE_FONT;
+  brotli::BrotliCompressBuffer(params, len, data, &compressed_len, result);
+  *result_len = compressed_len;
+  return true;
 }
 
 bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,
-    const uint8_t* src_buf, size_t src_size, uint32_t compression_type) {
-  if (compression_type == kCompressionTypeBrotli) {
-    size_t uncompressed_size = dst_size;
-    int ok = BrotliDecompressBuffer(src_size, src_buf,
-                                    &uncompressed_size, dst_buf);
-    if (!ok || uncompressed_size != dst_size) {
-      return OTS_FAILURE();
-    }
-    return true;
+  const uint8_t* src_buf, size_t src_size) {
+  size_t uncompressed_size = dst_size;
+  int ok = BrotliDecompressBuffer(src_size, src_buf,
+                                  &uncompressed_size, dst_buf);
+  if (!ok || uncompressed_size != dst_size) {
+    return OTS_FAILURE();
   }
-  // Unknown compression type
-  return OTS_FAILURE();
+  return true;
 }
 
 bool ReadLongDirectory(ots::Buffer* file, std::vector<Table>* tables,
@@ -865,7 +849,7 @@ bool ReadShortDirectory(ots::Buffer* file, std::vector<Table>* tables,
     if ((flag_byte & 0xC0) != 0) {
       return OTS_FAILURE();
     }
-    uint32_t flags = kCompressionTypeBrotli;
+    uint32_t flags = 0;
     if (i > 0) {
       flags |= kWoff2FlagsContinueStream;
     }
@@ -967,11 +951,10 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
       return OTS_FAILURE();
     }
     dst_offset = Round4(dst_offset);
-    if ((table->flags & kCompressionTypeMask) != kCompressionTypeNone) {
-      uncompressed_sum += table->src_length;
-      if (uncompressed_sum > std::numeric_limits<uint32_t>::max()) {
-        return OTS_FAILURE();
-      }
+
+    uncompressed_sum += table->src_length;
+    if (uncompressed_sum > std::numeric_limits<uint32_t>::max()) {
+      return OTS_FAILURE();
     }
   }
   // Enforce same 30M limit on uncompressed tables as OTS
@@ -1013,18 +996,11 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     const Table* table = &tables[i];
     uint32_t flags = table->flags;
     const uint8_t* src_buf = data + table->src_offset;
-    uint32_t compression_type = flags & kCompressionTypeMask;
     size_t transform_length = table->transform_length;
     if ((flags & kWoff2FlagsContinueStream) != 0) {
       if (!continue_valid) {
         return OTS_FAILURE();
       }
-    } else if (compression_type == kCompressionTypeNone) {
-      if (transform_length != table->src_length) {
-        return OTS_FAILURE();
-      }
-      transform_buf = src_buf;
-      continue_valid = false;
     } else if ((flags & kWoff2FlagsContinueStream) == 0) {
       uint64_t total_size = transform_length;
       for (uint16_t j = i + 1; j < num_tables; ++j) {
@@ -1038,7 +1014,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
       }
       uncompressed_buf.resize(total_size);
       if (!Woff2Uncompress(&uncompressed_buf[0], total_size,
-                           src_buf, compressed_length, compression_type)) {
+                           src_buf, compressed_length)) {
         return OTS_FAILURE();
       }
       transform_buf = &uncompressed_buf[0];
@@ -1129,17 +1105,6 @@ size_t ComputeTotalTransformLength(const Font& font) {
 }
 
 struct Woff2ConvertOptions {
-  uint32_t compression_type;
-  bool continue_streams;
-  bool keep_dsig;
-  bool transform_glyf;
-
-  Woff2ConvertOptions()
-      : compression_type(kCompressionTypeBrotli),
-        continue_streams(true),
-        keep_dsig(true),
-        transform_glyf(true) {}
-
 
 };
 
@@ -1153,8 +1118,6 @@ size_t MaxWOFF2CompressedSize(const uint8_t* data, size_t length) {
 
 bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                        uint8_t *result, size_t *result_length) {
-  Woff2ConvertOptions options;
-
   Font font;
   if (!ReadFont(data, length, &font)) {
     fprintf(stderr, "Parsing of the input font failed.\n");
@@ -1166,12 +1129,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     return false;
   }
 
-  if (!options.keep_dsig) {
-    font.tables.erase(TAG('D', 'S', 'I', 'G'));
-  }
-
-  if (options.transform_glyf &&
-      !TransformGlyfAndLocaTables(&font)) {
+  if (!TransformGlyfAndLocaTables(&font)) {
     fprintf(stderr, "Font transformation failed.\n");
     return false;
   }
@@ -1204,7 +1162,6 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   }
   // Compress all transformed data in one stream.
   if (!Woff2Compress(transform_buf.data(), total_transform_length,
-                     options.compression_type,
                      &compression_buf[0],
                      &total_compressed_length)) {
     fprintf(stderr, "Compression of combined table failed.\n");
@@ -1221,7 +1178,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     }
     Table table;
     table.tag = src_table.tag;
-    table.flags = options.compression_type;
+    table.flags = 0;
     table.src_length = src_table.length;
     table.transform_length = src_table.length;
     const uint8_t* transformed_data = src_table.data;

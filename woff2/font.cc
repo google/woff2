@@ -173,4 +173,14 @@ bool GetGlyphData(const Font& font, int glyph_index,
   return true;
 }
 
+bool RemoveDigitalSignature(Font* font) {
+  std::map<uint32_t, Font::Table>::iterator it =
+      font->tables.find(kDsigTableTag);
+  if (it != font->tables.end()) {
+    font->tables.erase(it);
+    font->num_tables = font->tables.size();
+  }
+  return true;
+}
+
 } // namespace woff2

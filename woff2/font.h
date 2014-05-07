@@ -29,6 +29,7 @@ namespace woff2 {
 static const uint32_t kGlyfTableTag = 0x676c7966;
 static const uint32_t kHeadTableTag = 0x68656164;
 static const uint32_t kLocaTableTag = 0x6c6f6361;
+static const uint32_t kDsigTableTag = 0x44534947;
 
 // Represents an sfnt font file. Only the table directory is parsed, for the
 // table data we only store a raw pointer, therefore a font object is valid only
@@ -75,6 +76,9 @@ int NumGlyphs(const Font& font);
 // with the given index. Returns false if the glyph is not found.
 bool GetGlyphData(const Font& font, int glyph_index,
                   const uint8_t** glyph_data, size_t* glyph_size);
+
+// Removes the digital signature (DSIG) table
+bool RemoveDigitalSignature(Font* font);
 
 } // namespace woff2
 

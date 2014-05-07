@@ -186,7 +186,8 @@ bool FixChecksums(Font* font) {
 }
 
 bool NormalizeFont(Font* font) {
-  return (NormalizeGlyphs(font) &&
+  return (RemoveDigitalSignature(font) &&
+          NormalizeGlyphs(font) &&
           NormalizeOffsets(font) &&
           FixChecksums(font));
 }
