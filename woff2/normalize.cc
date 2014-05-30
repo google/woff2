@@ -19,12 +19,13 @@
 #include <inttypes.h>
 #include <stddef.h>
 
-#include "./ots.h"
+#include "./buffer.h"
 #include "./port.h"
 #include "./font.h"
 #include "./glyph.h"
 #include "./round.h"
 #include "./store_bytes.h"
+#include "./table_tags.h"
 
 namespace woff2 {
 
@@ -67,7 +68,7 @@ bool NormalizeGlyphs(Font* font) {
   Font::Table* glyf_table = font->FindTable(kGlyfTableTag);
   Font::Table* loca_table = font->FindTable(kLocaTableTag);
   if (head_table == NULL || loca_table == NULL || glyf_table == NULL) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
   int index_fmt = head_table->data[51];
   int num_glyphs = NumGlyphs(*font);
@@ -97,18 +98,18 @@ bool NormalizeGlyphs(Font* font) {
     size_t glyph_size;
     if (!GetGlyphData(*font, i, &glyph_data, &glyph_size) ||
         (glyph_size > 0 && !ReadGlyph(glyph_data, glyph_size, &glyph))) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     NormalizeSimpleGlyphBoundingBox(&glyph);
     size_t glyf_dst_size = glyf_table->buffer.size() - glyf_offset;
     if (!StoreGlyph(glyph, glyf_dst + glyf_offset, &glyf_dst_size)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     glyf_dst_size = Round4(glyf_dst_size);
     if (glyf_dst_size > std::numeric_limits<uint32_t>::max() ||
         glyf_offset + static_cast<uint32_t>(glyf_dst_size) < glyf_offset ||
         (index_fmt == 0 && glyf_offset + glyf_dst_size >= (1UL << 17))) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     glyf_offset += glyf_dst_size;
   }
@@ -165,7 +166,7 @@ uint32_t ComputeHeaderChecksum(const Font& font) {
 bool FixChecksums(Font* font) {
   Font::Table* head_table = font->FindTable(kHeadTableTag);
   if (head_table == NULL || head_table->length < 12) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
   head_table->buffer.resize(Round4(head_table->length));
   uint8_t* head_buf = &head_table->buffer[0];

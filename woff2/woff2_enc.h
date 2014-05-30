@@ -1,4 +1,4 @@
-// Copyright 2013 Google Inc. All Rights Reserved.
+// Copyright 2014 Google Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,25 +14,13 @@
 //
 // Library for converting WOFF2 format font files to their TTF versions.
 
-#ifndef WOFF2_WOFF2_H_
-#define WOFF2_WOFF2_H_
+#ifndef WOFF2_WOFF2_ENC_H_
+#define WOFF2_WOFF2_ENC_H_
 
 #include <stddef.h>
 #include <inttypes.h>
-#include <string>
 
 namespace woff2 {
-
-using std::string;
-
-// Compute the size of the final uncompressed font, or 0 on error.
-size_t ComputeWOFF2FinalSize(const uint8_t *data, size_t length);
-
-// Decompresses the font into the target buffer. The result_length should
-// be the same as determined by ComputeFinalSize(). Returns true on successful
-// decompression.
-bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
-                       const uint8_t *data, size_t length);
 
 // Returns an upper bound on the size of the compressed file.
 size_t MaxWOFF2CompressedSize(const uint8_t* data, size_t length);
@@ -45,4 +33,4 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
 
 } // namespace woff2
 
-#endif  // WOFF2_WOFF2_H_
+#endif  // WOFF2_WOFF2_ENC_H_

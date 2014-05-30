@@ -25,12 +25,6 @@
 
 namespace woff2 {
 
-// Tags of popular tables.
-static const uint32_t kGlyfTableTag = 0x676c7966;
-static const uint32_t kHeadTableTag = 0x68656164;
-static const uint32_t kLocaTableTag = 0x6c6f6361;
-static const uint32_t kDsigTableTag = 0x44534947;
-
 // Represents an sfnt font file. Only the table directory is parsed, for the
 // table data we only store a raw pointer, therefore a font object is valid only
 // as long the data from which it was parsed is around.

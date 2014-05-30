@@ -19,7 +19,7 @@
 
 
 #include "file.h"
-#include "./woff2.h"
+#include "./woff2_dec.h"
 
 int main(int argc, char **argv) {
   using std::string;

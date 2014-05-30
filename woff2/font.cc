@@ -18,9 +18,10 @@
 
 #include <algorithm>
 
-#include "./ots.h"
+#include "./buffer.h"
 #include "./port.h"
 #include "./store_bytes.h"
+#include "./table_tags.h"
 
 namespace woff2 {
 
@@ -35,14 +36,14 @@ const Font::Table* Font::FindTable(uint32_t tag) const {
 }
 
 bool ReadFont(const uint8_t* data, size_t len, Font* font) {
-  ots::Buffer file(data, len);
+  Buffer file(data, len);
 
   // We don't care about the search_range, entry_selector and range_shift
   // fields, they will always be computed upon writing the font.
   if (!file.ReadU32(&font->flavor) ||
       !file.ReadU16(&font->num_tables) ||
       !file.Skip(6)) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
 
   std::map<uint32_t, uint32_t> intervals;
@@ -52,17 +53,17 @@ bool ReadFont(const uint8_t* data, size_t len, Font* font) {
         !file.ReadU32(&table.checksum) ||
         !file.ReadU32(&table.offset) ||
         !file.ReadU32(&table.length)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     if ((table.offset & 3) != 0 ||
         table.length > len ||
         len - table.length < table.offset) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     intervals[table.offset] = table.length;
     table.data = data + table.offset;
     if (font->tables.find(table.tag) != font->tables.end()) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     font->tables[table.tag] = table;
   }
@@ -71,7 +72,7 @@ bool ReadFont(const uint8_t* data, size_t len, Font* font) {
   uint32_t last_offset = 12UL + 16UL * font->num_tables;
   for (const auto& i : intervals) {
     if (i.first < last_offset || i.first + i.second < i.first) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     last_offset = i.first + i.second;
   }
@@ -91,7 +92,7 @@ size_t FontFileSize(const Font& font) {
 
 bool WriteFont(const Font& font, uint8_t* dst, size_t dst_size) {
   if (dst_size < 12ULL + 16ULL * font.num_tables) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
   size_t offset = 0;
   StoreU32(font.flavor, &offset, dst);
@@ -110,13 +111,13 @@ bool WriteFont(const Font& font, uint8_t* dst, size_t dst_size) {
     StoreU32(table.length, &offset, dst);
     if (table.offset + table.length < table.offset ||
         dst_size < table.offset + table.length) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     memcpy(dst + table.offset, table.data, table.length);
     size_t padding_size = (4 - (table.length & 3)) & 3;
     if (table.offset + table.length + padding_size < padding_size ||
         dst_size < table.offset + table.length + padding_size) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     memset(dst + table.offset + table.length, 0, padding_size);
   }
@@ -136,17 +137,17 @@ int NumGlyphs(const Font& font) {
 bool GetGlyphData(const Font& font, int glyph_index,
                   const uint8_t** glyph_data, size_t* glyph_size) {
   if (glyph_index < 0) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
   const Font::Table* head_table = font.FindTable(kHeadTableTag);
   const Font::Table* loca_table = font.FindTable(kLocaTableTag);
   const Font::Table* glyf_table = font.FindTable(kGlyfTableTag);
   if (head_table == NULL || loca_table == NULL || glyf_table == NULL ||
       head_table->length < 52) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
   int index_fmt = head_table->data[51];
-  ots::Buffer loca_buf(loca_table->data, loca_table->length);
+  Buffer loca_buf(loca_table->data, loca_table->length);
   if (index_fmt == 0) {
     uint16_t offset1, offset2;
     if (!loca_buf.Skip(2 * glyph_index) ||
@@ -154,7 +155,7 @@ bool GetGlyphData(const Font& font, int glyph_index,
         !loca_buf.ReadU16(&offset2) ||
         offset2 < offset1 ||
         2 * offset2 > glyf_table->length) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     *glyph_data = glyf_table->data + 2 * offset1;
     *glyph_size = 2 * (offset2 - offset1);
@@ -165,7 +166,7 @@ bool GetGlyphData(const Font& font, int glyph_index,
         !loca_buf.ReadU32(&offset2) ||
         offset2 < offset1 ||
         offset2 > glyf_table->length) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     *glyph_data = glyf_table->data + offset1;
     *glyph_size = offset2 - offset1;

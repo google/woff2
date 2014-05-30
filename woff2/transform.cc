@@ -18,9 +18,10 @@
 
 #include <complex>  // for std::abs
 
-#include "./ots.h"
+#include "./buffer.h"
 #include "./font.h"
 #include "./glyph.h"
+#include "./table_tags.h"
 
 namespace woff2 {
 
@@ -237,7 +238,7 @@ bool TransformGlyfAndLocaTables(Font* font) {
     size_t glyph_size;
     if (!GetGlyphData(*font, i, &glyph_data, &glyph_size) ||
         (glyph_size > 0 && !ReadGlyph(glyph_data, glyph_size, &glyph))) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     encoder.Encode(i, glyph);
   }
@@ -245,7 +246,7 @@ bool TransformGlyfAndLocaTables(Font* font) {
 
   const Font::Table* head_table = font->FindTable(kHeadTableTag);
   if (head_table == NULL || head_table->length < 52) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
   transformed_glyf->buffer[7] = head_table->data[51];  // index_format
 

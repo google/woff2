@@ -2,7 +2,8 @@
 
 include ../shared.mk
 
-OUROBJ = font.o glyph.o normalize.o transform.o woff2.o
+OUROBJ = font.o glyph.o normalize.o table_tags.o transform.o \
+         woff2_dec.o woff2_enc.o
 
 BROTLI = ../brotli
 ENCOBJ = $(BROTLI)/enc/*.o

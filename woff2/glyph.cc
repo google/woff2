@@ -18,7 +18,7 @@
 
 #include <stdlib.h>
 #include <limits>
-#include "./ots.h"
+#include "./buffer.h"
 #include "./store_bytes.h"
 
 namespace woff2 {
@@ -36,14 +36,14 @@ static const int32_t kFLAG_WE_HAVE_AN_X_AND_Y_SCALE = 1 << 6;
 static const int32_t kFLAG_WE_HAVE_A_TWO_BY_TWO = 1 << 7;
 static const int32_t kFLAG_WE_HAVE_INSTRUCTIONS = 1 << 8;
 
-bool ReadCompositeGlyphData(ots::Buffer* buffer, Glyph* glyph) {
+bool ReadCompositeGlyphData(Buffer* buffer, Glyph* glyph) {
   glyph->have_instructions = false;
   glyph->composite_data = buffer->buffer() + buffer->offset();
   size_t start_offset = buffer->offset();
   uint16_t flags = kFLAG_MORE_COMPONENTS;
   while (flags & kFLAG_MORE_COMPONENTS) {
     if (!buffer->ReadU16(&flags)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     glyph->have_instructions |= (flags & kFLAG_WE_HAVE_INSTRUCTIONS) != 0;
     size_t arg_size = 2;  // glyph index
@@ -60,22 +60,22 @@ bool ReadCompositeGlyphData(ots::Buffer* buffer, Glyph* glyph) {
       arg_size += 8;
     }
     if (!buffer->Skip(arg_size)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
   }
   if (buffer->offset() - start_offset > std::numeric_limits<uint32_t>::max()) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
   glyph->composite_data_size = buffer->offset() - start_offset;
   return true;
 }
 
 bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
-  ots::Buffer buffer(data, len);
+  Buffer buffer(data, len);
 
   int16_t num_contours;
   if (!buffer.ReadS16(&num_contours)) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
 
   if (num_contours == 0) {
@@ -88,7 +88,7 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
       !buffer.ReadS16(&glyph->y_min) ||
       !buffer.ReadS16(&glyph->x_max) ||
       !buffer.ReadS16(&glyph->y_max)) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
 
   if (num_contours > 0) {
@@ -100,7 +100,7 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
     for (int i = 0; i < num_contours; ++i) {
       uint16_t point_index;
       if (!buffer.ReadU16(&point_index)) {
-        return OTS_FAILURE();
+        return FONT_COMPRESSION_FAILURE();
       }
       uint16_t num_points = point_index - last_point_index + (i == 0 ? 1 : 0);
       glyph->contours[i].resize(num_points);
@@ -109,11 +109,11 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
 
     // Read the instructions.
     if (!buffer.ReadU16(&glyph->instructions_size)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     glyph->instructions_data = data + buffer.offset();
     if (!buffer.Skip(glyph->instructions_size)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
 
     // Read the run-length coded flags.
@@ -125,11 +125,11 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
       for (int j = 0; j < glyph->contours[i].size(); ++j) {
         if (flag_repeat == 0) {
           if (!buffer.ReadU8(&flag)) {
-            return OTS_FAILURE();
+            return FONT_COMPRESSION_FAILURE();
           }
           if (flag & kFLAG_REPEAT) {
             if (!buffer.ReadU8(&flag_repeat)) {
-              return OTS_FAILURE();
+              return FONT_COMPRESSION_FAILURE();
             }
           }
         } else {
@@ -149,7 +149,7 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
           // single byte x-delta coord value
           uint8_t x_delta;
           if (!buffer.ReadU8(&x_delta)) {
-            return OTS_FAILURE();
+            return FONT_COMPRESSION_FAILURE();
           }
           int sign = (flag & kFLAG_XREPEATSIGN) ? 1 : -1;
           glyph->contours[i][j].x = prev_x + sign * x_delta;
@@ -158,7 +158,7 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
           int16_t x_delta = 0;
           if (!(flag & kFLAG_XREPEATSIGN)) {
             if (!buffer.ReadS16(&x_delta)) {
-              return OTS_FAILURE();
+              return FONT_COMPRESSION_FAILURE();
             }
           }
           glyph->contours[i][j].x = prev_x + x_delta;
@@ -176,7 +176,7 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
           // single byte y-delta coord value
           uint8_t y_delta;
           if (!buffer.ReadU8(&y_delta)) {
-            return OTS_FAILURE();
+            return FONT_COMPRESSION_FAILURE();
           }
           int sign = (flag & kFLAG_YREPEATSIGN) ? 1 : -1;
           glyph->contours[i][j].y = prev_y + sign * y_delta;
@@ -185,7 +185,7 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
           int16_t y_delta = 0;
           if (!(flag & kFLAG_YREPEATSIGN)) {
             if (!buffer.ReadS16(&y_delta)) {
-              return OTS_FAILURE();
+              return FONT_COMPRESSION_FAILURE();
             }
           }
           glyph->contours[i][j].y = prev_y + y_delta;
@@ -196,22 +196,22 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
   } else if (num_contours == -1) {
     // Composite glyph.
     if (!ReadCompositeGlyphData(&buffer, glyph)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     // Read the instructions.
     if (glyph->have_instructions) {
       if (!buffer.ReadU16(&glyph->instructions_size)) {
-        return OTS_FAILURE();
+        return FONT_COMPRESSION_FAILURE();
       }
       glyph->instructions_data = data + buffer.offset();
       if (!buffer.Skip(glyph->instructions_size)) {
-        return OTS_FAILURE();
+        return FONT_COMPRESSION_FAILURE();
       }
     } else {
       glyph->instructions_size = 0;
     }
   } else {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
   return true;
 }
@@ -236,7 +236,7 @@ bool StoreEndPtsOfContours(const Glyph& glyph, size_t* offset, uint8_t* dst) {
     end_point += contour.size();
     if (contour.size() > std::numeric_limits<uint16_t>::max() ||
         end_point > std::numeric_limits<uint16_t>::max()) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     Store16(end_point, offset, dst);
   }
@@ -280,12 +280,12 @@ bool StorePoints(const Glyph& glyph, size_t* offset,
       } else {
         if (repeat_count != 0) {
           if (*offset >= dst_size) {
-            return OTS_FAILURE();
+            return FONT_COMPRESSION_FAILURE();
           }
           dst[(*offset)++] = repeat_count;
         }
         if (*offset >= dst_size) {
-          return OTS_FAILURE();
+          return FONT_COMPRESSION_FAILURE();
         }
         dst[(*offset)++] = flag;
         repeat_count = 0;
@@ -297,13 +297,13 @@ bool StorePoints(const Glyph& glyph, size_t* offset,
   }
   if (repeat_count != 0) {
     if (*offset >= dst_size) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     dst[(*offset)++] = repeat_count;
   }
 
   if (*offset + x_bytes + y_bytes > dst_size) {
-    return OTS_FAILURE();
+    return FONT_COMPRESSION_FAILURE();
   }
 
   // Store the x and y coordinates.
@@ -346,7 +346,7 @@ bool StoreGlyph(const Glyph& glyph, uint8_t* dst, size_t* dst_size) {
     if (*dst_size < ((10ULL + glyph.composite_data_size) +
                      ((glyph.have_instructions ? 2ULL : 0) +
                       glyph.instructions_size))) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     Store16(-1, &offset, dst);
     StoreBbox(glyph, &offset, dst);
@@ -357,20 +357,20 @@ bool StoreGlyph(const Glyph& glyph, uint8_t* dst, size_t* dst_size) {
   } else if (glyph.contours.size() > 0) {
     // Simple glyph.
     if (glyph.contours.size() > std::numeric_limits<int16_t>::max()) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     if (*dst_size < ((12ULL + 2 * glyph.contours.size()) +
                      glyph.instructions_size)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     Store16(glyph.contours.size(), &offset, dst);
     StoreBbox(glyph, &offset, dst);
     if (!StoreEndPtsOfContours(glyph, &offset, dst)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     StoreInstructions(glyph, &offset, dst);
     if (!StorePoints(glyph, &offset, dst, *dst_size)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
   }
   *dst_size = offset;

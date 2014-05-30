@@ -15,8 +15,8 @@
 // The parts of ots.h & opentype-sanitiser.h that we need, taken from the
 // https://code.google.com/p/ots/ project.
 
-#ifndef WOFF2_OTS_H_
-#define WOFF2_OTS_H_
+#ifndef WOFF2_BUFFER_H_
+#define WOFF2_BUFFER_H_
 
 #include <stdint.h>
 #include <arpa/inet.h>
@@ -24,12 +24,13 @@
 #include <cstring>
 #include <limits>
 
-namespace ots {
+namespace woff2 {
 
-#if defined(_MSC_VER) || !defined(OTS_DEBUG)
-#define OTS_FAILURE() false
+#if defined(_MSC_VER) || !defined(FONT_COMPRESSION_DEBUG)
+#define FONT_COMPRESSION_FAILURE() false
 #else
-#define OTS_FAILURE() ots::Failure(__FILE__, __LINE__, __PRETTY_FUNCTION__)
+#define FONT_COMPRESSION_FAILURE() \
+  util::compression::font::Failure(__FILE__, __LINE__, __PRETTY_FUNCTION__)
 inline bool Failure(const char *f, int l, const char *fn) {
   std::fprintf(stderr, "ERROR at %s:%d (%s)\n", f, l, fn);
   std::fflush(stderr);
@@ -57,11 +58,11 @@ class Buffer {
 
   bool Read(uint8_t *buffer, size_t n_bytes) {
     if (n_bytes > 1024 * 1024 * 1024) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     if ((offset_ + n_bytes > length_) ||
         (offset_ > length_ - n_bytes)) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     if (buffer) {
       std::memcpy(buffer, buffer_ + offset_, n_bytes);
@@ -72,7 +73,7 @@ class Buffer {
 
   inline bool ReadU8(uint8_t *value) {
     if (offset_ + 1 > length_) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     *value = buffer_[offset_];
     ++offset_;
@@ -81,7 +82,7 @@ class Buffer {
 
   bool ReadU16(uint16_t *value) {
     if (offset_ + 2 > length_) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     std::memcpy(value, buffer_ + offset_, sizeof(uint16_t));
     *value = ntohs(*value);
@@ -95,7 +96,7 @@ class Buffer {
 
   bool ReadU24(uint32_t *value) {
     if (offset_ + 3 > length_) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     *value = static_cast<uint32_t>(buffer_[offset_]) << 16 |
         static_cast<uint32_t>(buffer_[offset_ + 1]) << 8 |
@@ -106,7 +107,7 @@ class Buffer {
 
   bool ReadU32(uint32_t *value) {
     if (offset_ + 4 > length_) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     std::memcpy(value, buffer_ + offset_, sizeof(uint32_t));
     *value = ntohl(*value);
@@ -120,7 +121,7 @@ class Buffer {
 
   bool ReadTag(uint32_t *value) {
     if (offset_ + 4 > length_) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     std::memcpy(value, buffer_ + offset_, sizeof(uint32_t));
     offset_ += 4;
@@ -129,7 +130,7 @@ class Buffer {
 
   bool ReadR64(uint64_t *value) {
     if (offset_ + 8 > length_) {
-      return OTS_FAILURE();
+      return FONT_COMPRESSION_FAILURE();
     }
     std::memcpy(value, buffer_ + offset_, sizeof(uint64_t));
     offset_ += 8;
@@ -148,6 +149,6 @@ class Buffer {
   size_t offset_;
 };
 
-}  // namespace ots
+} // namespace woff2
 
-#endif  // WOFF2_OTS_H_
+#endif  // WOFF2_BUFFER_H_

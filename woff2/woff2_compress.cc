@@ -17,7 +17,7 @@
 #include <string>
 
 #include "file.h"
-#include "./woff2.h"
+#include "./woff2_enc.h"
 
 
 int main(int argc, char **argv) {
