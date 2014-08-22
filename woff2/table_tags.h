@@ -26,6 +26,7 @@ static const uint32_t kGlyfTableTag = 0x676c7966;
 static const uint32_t kHeadTableTag = 0x68656164;
 static const uint32_t kLocaTableTag = 0x6c6f6361;
 static const uint32_t kDsigTableTag = 0x44534947;
+static const uint32_t kCffTableTag = 0x43464620;
 
 extern const uint32_t kKnownTags[];
 

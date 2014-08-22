@@ -66,6 +66,9 @@ bool WriteFont(const Font& font, uint8_t* dst, size_t dst_size);
 // zero for CFF-flavored fonts.
 int NumGlyphs(const Font& font);
 
+// Returns the index format of the font
+int IndexFormat(const Font& font);
+
 // Sets *glyph_data and *glyph_size to point to the location of the glyph data
 // with the given index. Returns false if the glyph is not found.
 bool GetGlyphData(const Font& font, int glyph_index,

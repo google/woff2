@@ -227,6 +227,12 @@ class GlyfEncoder {
 }  // namespace
 
 bool TransformGlyfAndLocaTables(Font* font) {
+  // no transform for CFF
+  if (font->FindTable(kCffTableTag) != NULL
+      && font->FindTable(kGlyfTableTag) == NULL
+      && font->FindTable(kLocaTableTag) == NULL) {
+    return true;
+  }
   Font::Table* transformed_glyf = &font->tables[kGlyfTableTag ^ 0x80808080];
   Font::Table* transformed_loca = &font->tables[kLocaTableTag ^ 0x80808080];
 

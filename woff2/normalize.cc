@@ -63,29 +63,16 @@ void NormalizeSimpleGlyphBoundingBox(Glyph* glyph) {
 
 }  // namespace
 
-bool NormalizeGlyphs(Font* font) {
-  Font::Table* head_table = font->FindTable(kHeadTableTag);
+namespace {
+
+bool WriteNormalizedLoca(int index_fmt, int num_glyphs, Font* font) {
   Font::Table* glyf_table = font->FindTable(kGlyfTableTag);
   Font::Table* loca_table = font->FindTable(kLocaTableTag);
-  if (head_table == NULL || loca_table == NULL || glyf_table == NULL) {
-    return FONT_COMPRESSION_FAILURE();
-  }
-  int index_fmt = head_table->data[51];
-  int num_glyphs = NumGlyphs(*font);
 
-  // We need to allocate a bit more than its original length for the normalized
-  // glyf table, since it can happen that the glyphs in the original table are
-  // 2-byte aligned, while in the normalized table they are 4-byte aligned.
-  // That gives a maximum of 2 bytes increase per glyph. However, there is no
-  // theoretical guarantee that the total size of the flags plus the coordinates
-  // is the smallest possible in the normalized version, so we have to allow
-  // some general overhead.
-  // TODO(user) Figure out some more precise upper bound on the size of
-  // the overhead.
-  size_t max_normalized_glyf_size = 1.1 * glyf_table->length + 2 * num_glyphs;
+  int glyph_sz = index_fmt == 0 ? 2 : 4;
+  loca_table->buffer.resize(Round4(num_glyphs + 1) * glyph_sz);
+  loca_table->length = (num_glyphs + 1) * glyph_sz;
 
-  glyf_table->buffer.resize(max_normalized_glyf_size);
-  loca_table->buffer.resize(Round4(loca_table->length));
   uint8_t* glyf_dst = &glyf_table->buffer[0];
   uint8_t* loca_dst = &loca_table->buffer[0];
   uint32_t glyf_offset = 0;
@@ -113,12 +100,84 @@ bool NormalizeGlyphs(Font* font) {
     }
     glyf_offset += glyf_dst_size;
   }
+  if (glyf_offset == 0) {
+    return false;
+  }
+
   StoreLoca(index_fmt, glyf_offset, &loca_offset, loca_dst);
 
   glyf_table->buffer.resize(glyf_offset);
   glyf_table->data = &glyf_table->buffer[0];
   glyf_table->length = glyf_offset;
   loca_table->data = &loca_table->buffer[0];
+
+  return true;
+}
+
+}  // namespace
+
+namespace {
+
+bool MakeEditableBuffer(Font* font, int tableTag) {
+  Font::Table* table = font->FindTable(tableTag);
+  if (table == NULL) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  int sz = Round4(table->length);
+  table->buffer.resize(sz);
+  uint8_t* buf = &table->buffer[0];
+  memcpy(buf, table->data, sz);
+  table->data = buf;
+  return true;
+}
+
+}  // namespace
+
+bool NormalizeGlyphs(Font* font) {
+  Font::Table* cff_table = font->FindTable(kCffTableTag);
+  Font::Table* head_table = font->FindTable(kHeadTableTag);
+  Font::Table* glyf_table = font->FindTable(kGlyfTableTag);
+  Font::Table* loca_table = font->FindTable(kLocaTableTag);
+  if (head_table == NULL) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  // CFF, no loca, no glyf is OK for CFF. If so, don't normalize.
+  if (cff_table != NULL && loca_table == NULL && glyf_table == NULL) {
+    return true;
+  }
+  if (loca_table == NULL || glyf_table == NULL) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  int index_fmt = head_table->data[51];
+  int num_glyphs = NumGlyphs(*font);
+
+  // We need to allocate a bit more than its original length for the normalized
+  // glyf table, since it can happen that the glyphs in the original table are
+  // 2-byte aligned, while in the normalized table they are 4-byte aligned.
+  // That gives a maximum of 2 bytes increase per glyph. However, there is no
+  // theoretical guarantee that the total size of the flags plus the coordinates
+  // is the smallest possible in the normalized version, so we have to allow
+  // some general overhead.
+  // TODO(user) Figure out some more precise upper bound on the size of
+  // the overhead.
+  size_t max_normalized_glyf_size = 1.1 * glyf_table->length + 2 * num_glyphs;
+
+  glyf_table->buffer.resize(max_normalized_glyf_size);
+
+  // if we can't write a loca using short's (index_fmt 0)
+  // try again using longs (index_fmt 1)
+  if (!WriteNormalizedLoca(index_fmt, num_glyphs, font)) {
+    if (index_fmt != 0) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+
+    // Rewrite loca with 4-byte entries & update head to match
+    index_fmt = 1;
+    if (!WriteNormalizedLoca(index_fmt, num_glyphs, font)) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+    head_table->buffer[51] = 1;
+  }
 
   return true;
 }
@@ -168,10 +227,7 @@ bool FixChecksums(Font* font) {
   if (head_table == NULL || head_table->length < 12) {
     return FONT_COMPRESSION_FAILURE();
   }
-  head_table->buffer.resize(Round4(head_table->length));
   uint8_t* head_buf = &head_table->buffer[0];
-  memcpy(head_buf, head_table->data, Round4(head_table->length));
-  head_table->data = head_buf;
   size_t offset = 8;
   StoreU32(0, &offset, head_buf);
   uint32_t file_checksum = 0;
@@ -187,7 +243,8 @@ bool FixChecksums(Font* font) {
 }
 
 bool NormalizeFont(Font* font) {
-  return (RemoveDigitalSignature(font) &&
+  return (MakeEditableBuffer(font, kHeadTableTag) &&
+          RemoveDigitalSignature(font) &&
           NormalizeGlyphs(font) &&
           NormalizeOffsets(font) &&
           FixChecksums(font));

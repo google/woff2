@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Library for converting WOFF2 format font files to their TTF versions.
+// Library for converting TTF format font files to their WOFF2 versions.
 
 #include "./woff2_enc.h"
 
@@ -53,7 +53,7 @@ size_t Base128Size(size_t n) {
 void StoreBase128(size_t len, size_t* offset, uint8_t* dst) {
   size_t size = Base128Size(len);
   for (int i = 0; i < size; ++i) {
-    int b = (int)(len >> (7 * (size - i - 1))) & 0x7f;
+    int b = static_cast<int>((len >> (7 * (size - i - 1))) & 0x7f);
     if (i < size - 1) {
       b |= 0x80;
     }
@@ -96,6 +96,9 @@ int KnownTableIndex(uint32_t tag) {
 void StoreTableEntry(const Table& table, size_t* offset, uint8_t* dst) {
   uint8_t flag_byte = KnownTableIndex(table.tag);
   dst[(*offset)++] = flag_byte;
+  // The index here is treated as a set of flag bytes because
+  // bits 6 and 7 of the byte are reserved for future use as flags.
+  // 0x3f or 63 means an arbitrary table tag.
   if ((flag_byte & 0x3f) == 0x3f) {
     StoreU32(table.tag, offset, dst);
   }
@@ -106,7 +109,8 @@ void StoreTableEntry(const Table& table, size_t* offset, uint8_t* dst) {
 }
 
 size_t TableEntrySize(const Table& table) {
-  size_t size = KnownTableIndex(table.tag) < 31 ? 1 : 5;
+  uint8_t flag_byte = KnownTableIndex(table.tag);
+  size_t size = ((flag_byte & 0x3f) != 0x3f) ? 1 : 5;
   size += Base128Size(table.src_length);
   if ((table.flags & kWoff2FlagsTransform) != 0) {
      size += Base128Size(table.transform_length);
@@ -114,7 +118,8 @@ size_t TableEntrySize(const Table& table) {
   return size;
 }
 
-size_t ComputeWoff2Length(const std::vector<Table>& tables) {
+size_t ComputeWoff2Length(const std::vector<Table>& tables,
+                          size_t extended_metadata_length) {
   size_t size = kWoff2HeaderSize;
   for (const auto& table : tables) {
     size += TableEntrySize(table);
@@ -123,6 +128,7 @@ size_t ComputeWoff2Length(const std::vector<Table>& tables) {
     size += table.dst_length;
     size = Round4(size);
   }
+  size += extended_metadata_length;
   return size;
 }
 
@@ -150,15 +156,30 @@ size_t ComputeTotalTransformLength(const Font& font) {
 }  // namespace
 
 size_t MaxWOFF2CompressedSize(const uint8_t* data, size_t length) {
+  return MaxWOFF2CompressedSize(data, length, "");
+}
+
+size_t MaxWOFF2CompressedSize(const uint8_t* data, size_t length,
+    const string& extended_metadata) {
   // Except for the header size, which is 32 bytes larger in woff2 format,
   // all other parts should be smaller (table header in short format,
   // transformations and compression). Just to be sure, we will give some
   // headroom anyway.
-  return length + 1024;
+  return length + 1024 + extended_metadata.length();
+}
+
+uint32_t CompressedBufferSize(uint32_t original_size) {
+  return 1.2 * original_size + 10240;
 }
 
 bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                        uint8_t *result, size_t *result_length) {
+  return ConvertTTFToWOFF2(data, length, result, result_length, "");
+}
+
+bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
+                       uint8_t *result, size_t *result_length,
+                       const string& extended_metadata) {
   Font font;
   if (!ReadFont(data, length, &font)) {
     fprintf(stderr, "Parsing of the input font failed.\n");
@@ -187,7 +208,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   // the size. If the compressor overflows this, it should return false and
   // then this function will also return false.
   size_t total_transform_length = ComputeTotalTransformLength(font);
-  size_t compression_buffer_size = 1.2 * total_transform_length + 10240;
+  size_t compression_buffer_size = CompressedBufferSize(total_transform_length);
   std::vector<uint8_t> compression_buf(compression_buffer_size);
   uint32_t total_compressed_length = compression_buffer_size;
 
@@ -207,6 +228,23 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                      &total_compressed_length)) {
     fprintf(stderr, "Compression of combined table failed.\n");
     return false;
+  }
+
+  // Compress the extended metadata
+  uint32_t compressed_metadata_buf_length =
+    CompressedBufferSize(extended_metadata.length());
+  std::vector<uint8_t> compressed_metadata_buf(compressed_metadata_buf_length);
+
+  if (extended_metadata.length() > 0) {
+    if (!Woff2Compress((const uint8_t*)extended_metadata.data(),
+                       extended_metadata.length(),
+                       compressed_metadata_buf.data(),
+                       &compressed_metadata_buf_length)) {
+      fprintf(stderr, "Compression of extended metadata failed.\n");
+      return false;
+    }
+  } else {
+    compressed_metadata_buf_length = 0;
   }
 
   std::vector<Table> tables;
@@ -241,7 +279,8 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     tables.push_back(table);
   }
 
-  size_t woff2_length = ComputeWoff2Length(tables);
+  size_t woff2_length =
+    ComputeWoff2Length(tables, compressed_metadata_buf_length);
   if (woff2_length > *result_length) {
     fprintf(stderr, "Result allocation was too small (%zd vs %zd bytes).\n",
            *result_length, woff2_length);
@@ -258,9 +297,16 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   StoreU32(ComputeTTFLength(tables), &offset, result);
   StoreU32(total_compressed_length, &offset, result);
   StoreBytes(head_table->data + 4, 4, &offset, result);  // font revision
-  StoreU32(0, &offset, result);  // metaOffset
-  StoreU32(0, &offset, result);  // metaLength
-  StoreU32(0, &offset, result);  // metaOrigLength
+  if (compressed_metadata_buf_length > 0) {
+    StoreU32(woff2_length - compressed_metadata_buf_length,
+             &offset, result);  // metaOffset
+    StoreU32(compressed_metadata_buf_length, &offset, result);  // metaLength
+    StoreU32(extended_metadata.length(), &offset, result);  // metaOrigLength
+  } else {
+    StoreU32(0, &offset, result);  // metaOffset
+    StoreU32(0, &offset, result);  // metaLength
+    StoreU32(0, &offset, result);  // metaOrigLength
+  }
   StoreU32(0, &offset, result);  // privOffset
   StoreU32(0, &offset, result);  // privLength
   for (const auto& table : tables) {
@@ -270,6 +316,9 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     StoreBytes(table.dst_data, table.dst_length, &offset, result);
     offset = Round4(offset);
   }
+  StoreBytes(compressed_metadata_buf.data(), compressed_metadata_buf_length,
+             &offset, result);
+
   if (*result_length != offset) {
     fprintf(stderr, "Mismatch between computed and actual length "
             "(%zd vs %zd)\n", *result_length, offset);

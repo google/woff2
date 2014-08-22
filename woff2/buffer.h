@@ -37,6 +37,7 @@ typedef unsigned __int64 uint64_t;
 #include <stdint.h>
 #endif
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -49,8 +50,8 @@ namespace woff2 {
 #define FONT_COMPRESSION_FAILURE() \
   util::compression::font::Failure(__FILE__, __LINE__, __PRETTY_FUNCTION__)
 inline bool Failure(const char *f, int l, const char *fn) {
-  std::fprintf(stderr, "ERROR at %s:%d (%s)\n", f, l, fn);
-  std::fflush(stderr);
+  fprintf(stderr, "ERROR at %s:%d (%s)\n", f, l, fn);
+  fflush(stderr);
   return false;
 }
 #endif

@@ -17,6 +17,8 @@
 #ifndef WOFF2_ROUND_H_
 #define WOFF2_ROUND_H_
 
+#include <limits.h>
+
 namespace woff2 {
 
 // Round a value up to the nearest multiple of 4. Don't round the value in the

@@ -130,8 +130,17 @@ int NumGlyphs(const Font& font) {
   if (head_table == NULL || loca_table == NULL || head_table->length < 52) {
     return 0;
   }
-  int index_fmt = head_table->data[51];
-  return (loca_table->length / (index_fmt == 0 ? 2 : 4)) - 1;
+  int index_fmt = IndexFormat(font);
+  int num_glyphs = (loca_table->length / (index_fmt == 0 ? 2 : 4)) - 1;
+  return num_glyphs;
+}
+
+int IndexFormat(const Font& font) {
+  const Font::Table* head_table = font.FindTable(kHeadTableTag);
+  if (head_table == NULL) {
+    return 0;
+  }
+  return head_table->data[51];
 }
 
 bool GetGlyphData(const Font& font, int glyph_index,
@@ -146,7 +155,9 @@ bool GetGlyphData(const Font& font, int glyph_index,
       head_table->length < 52) {
     return FONT_COMPRESSION_FAILURE();
   }
-  int index_fmt = head_table->data[51];
+
+  int index_fmt = IndexFormat(font);
+
   Buffer loca_buf(loca_table->data, loca_table->length);
   if (index_fmt == 0) {
     uint16_t offset1, offset2;

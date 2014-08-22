@@ -19,17 +19,27 @@
 
 #include <stddef.h>
 #include <inttypes.h>
+#include <string>
+
+using std::string;
+
 
 namespace woff2 {
 
 // Returns an upper bound on the size of the compressed file.
 size_t MaxWOFF2CompressedSize(const uint8_t* data, size_t length);
+size_t MaxWOFF2CompressedSize(const uint8_t* data, size_t length,
+                              const string& extended_metadata);
 
 // Compresses the font into the target buffer. *result_length should be at least
 // the value returned by MaxWOFF2CompressedSize(), upon return, it is set to the
 // actual compressed size. Returns true on successful compression.
 bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                        uint8_t *result, size_t *result_length);
+
+bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
+                       uint8_t *result, size_t *result_length,
+                       const string& extended_metadata);
 
 } // namespace woff2
 
