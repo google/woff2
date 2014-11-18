@@ -8,14 +8,14 @@ woff2/ contains the C++ code for compressing and decompressing fonts.
 
 docs/ contains documents describing the proposed compression format.
 
-= Build & Run =
+# Build & Run
 
 This document documents how to run the compression reference code. At this
 writing, the code, while it is intended to produce a bytestream that can be
 reconstructed into a working font, the reference decompression code is not
 done, and the exact format of that bytestream is subject to change.
 
-== Build ==
+## Build
 
 On a standard Unix-style environment:
 
@@ -28,14 +28,14 @@ cd woff2
 make clean all
 ```
 
-== Run ==
+## Run
 
 ```
 woff2_compress myfont.ttf
 woff2_decompress myfont.woff2
 ```
 
-= References =
+# References
 
 http://www.w3.org/TR/WOFF2/
 http://www.w3.org/Submission/MTX/
