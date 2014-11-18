@@ -4,151 +4,40 @@ compression related modules in this repository.
 brotli/ contains reference code for the Brotli byte-level compression
 algorithm. Note that it is licensed under an Apache 2 license.
 
-src/ contains prototype Java code for compressing fonts.
-
-cpp/ contains prototype C++ code for decompressing fonts.
+woff2/ contains the C++ code for compressing and decompressing fonts.
 
 docs/ contains documents describing the proposed compression format.
 
-= How to run the compression test tool =
+= Build & Run =
 
 This document documents how to run the compression reference code. At this
 writing, the code, while it is intended to produce a bytestream that can be
 reconstructed into a working font, the reference decompression code is not
 done, and the exact format of that bytestream is subject to change.
 
-== Building the tool ==
+== Build ==
 
-On a standard Unix-style environment, it should be as simple as running “ant”.
+On a standard Unix-style environment:
 
-The tool depends on sfntly for much of the font work. The lib/ directory
-contains a snapshot jar. If you want to use the latest sfntly sources, then cd
-to the java subdirectory, run “ant”, then copy these files dist/lib/sfntly.jar
-dist/tools/conversion/eot/eotconverter.jar and
-dist.tools/conversion/woff/woffconverter.jar to $(thisproject)/lib:
+```
+git clone https://github.com/google/woff2.git
+cd woff2
+git submodule init
+git submodule update
+cd woff2
+make clean all
+```
 
-dist/lib/sfntly.jar dist/tools/conversion/eot/eotconverter.jar
-dist.tools/conversion/woff/woffconverter.jar
+== Run ==
 
-There’s also a dependency on guava (see references below).
-
-The dependencies are subject to their own licenses.
-
-== Setting up the test ==
-
-A run of the tool evaluates a “base” configuration plus one or more test
-configurations, for each font. It measures the file size of the test as a ratio
-over the base file size, then graphs the value of that ratio sorted across all
-files given on the command line.
-
-The test parameters are set by command line options (an improvement from the
-last snapshot). The base is set by the -b command line option, and the
-additional tests are specified by repeated -x command line options (see below).
-
-Each test is specified by a string description. It is a colon-separated list of
-stages. The final stage is entropy compression and can be one of “gzip”,
-“lzma”, “bzip2”, “woff”, “eot” (with actual wire-format MTX compression), or
-“uncomp” (for raw, uncompressed TTF’s). Also, the new wire-format draft
-WOFF2 spec is available as "woff2", and takes an entropy coding as an
-optional argument, as in "woff2/gzip" or "woff2/lzma".
-
-Other stages may optionally include subparameters (following a slash, and
-comma-separated). The stages are:
-
-glyf: performs glyf-table preprocessing based on MTX. There are subparameters:
-1. cbbox (composite bounding box). When specified, the bounding box for
-composite glyphs is included, otherwise stripped 2. sbbox (simple bounding
-box). When specified, the bounding box for simple glyphs is included 3. code:
-the bytecode is separated out into a separate stream 4. triplet: triplet coding
-(as in MTX) is used 5. push: push sequences are separated; if unset, pushes are
-kept inline in the bytecode 6. reslice: components of the glyf table are
-separated into individual streams, taking the MTX idea of separating the
-bytecodes further.
-
-hmtx: strips lsb’s from the hmtx table. Based on the idea that lsb’s can be
-reconstructed from bbox.
-
-hdmx: performs the delta coding on hdmx, essentially the same as MTX.
-
-cmap: compresses cmap table: wire format representation is inverse of cmap
-table plus exceptions (one glyph encoded by multiple character codes).
-
-kern: compresses kern table (not robust, intended just for rough testing).
-
-strip: the subparameters are a list of tables to be stripped entirely
-(comma-separated).
-
-The string roughly corresponding to MTX is:
-
-glyf/cbbox,code,triplet,push,hop:hdmx:gzip
-
-Meaning: glyph encoding is used, with simple glyph bboxes stripped (but
-composite glyph bboxes included), triplet coding, push sequences, and hop
-codes. The hdmx table is compressed. And finally, gzip is used as the entropy
-coder.
-
-This differs from MTX in a number of small ways: LZCOMP is not exactly the same
-as gzip. MTX uses three separate compression streams (the base font including
-triplet-coded glyph data), the bytecodes, and the push sequences, while this
-test uses a single stream. MTX also compresses the CVT table (an upper bound on
-the impact of this can be estimated by testing strip/cvt)
-
-Lastly, as a point of methodology, the code by default strips the “dsig” table,
-which would be invalidated by any non-bit-identical change to the font data. If
-it is desired to keep this table, add the “keepdsig” stage.
-
-The string representing the currently most aggressive optimization level is:
-
-glyf/triplet,code,push,reslice:hdmx:hmtx:cmap:kern:lzma
-
-In addition to the MTX one above, it strips the bboxes from composite glyphs,
-reslices the glyf table, compresses the htmx, cmap, and kern tables, and uses
-lzma as the entropy coding.
-
-The string corresponding to the current WOFF Ultra Condensed draft spec
-document is:
-
-glyf/cbbox,triplet,code,reslice:woff2/lzma
-
-The current C++ codebase can roundtrip compressed files as long as no per-table
-entropy coding is specified, as below (this will be fixed soon).
-
-glyf/cbbox,triplet,code,reslice:woff2
-
-
-== Running the tool ==
-
-java -jar build/jar/compression.jar *.ttf > chart.html
-
-The tool takes a list of OpenType fonts on the commandline, and generates an
-HTML chart, which it simply outputs to stdout. This chart uses the Google Chart
-API for plotting.
-
-Options:
-
--b <desc>
-
-Sets the baseline experiment description.
-
-[ -x <desc> ]...
-
-Sets an experiment description. Can be used multiple times.
-
--o
-
-Outputs the actual compressed file, substituting ".wof2" for ".ttf" in
-the input file name. Only useful when a single -x parameter is specified.
-
-= Decompressing the fonts =
-
-See the cpp/ directory (including cpp/README) for the C++ implementation of
-decompression. This code is based on OTS, and successfully roundtrips the
-basic compression as described in the draft spec.
+```
+woff2_compress myfont.ttf
+woff2_decompress myfont.woff2
+```
 
 = References =
 
-sfntly: http://code.google.com/p/sfntly/ Guava:
-http://code.google.com/p/guava-libraries/ MTX:
+http://www.w3.org/TR/WOFF2/
 http://www.w3.org/Submission/MTX/
 
 Also please refer to documents (currently Google Docs):
