@@ -4,7 +4,7 @@ compression related modules in this repository.
 brotli/ contains reference code for the Brotli byte-level compression
 algorithm. Note that it is licensed under an Apache 2 license.
 
-woff2/ contains the C++ code for compressing and decompressing fonts.
+src/ contains the C++ code for compressing and decompressing fonts.
 
 # Build & Run
 
