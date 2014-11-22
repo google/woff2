@@ -1,5 +1,5 @@
 OS := $(shell uname)
-IDIRS=-I../brotli/dec/ -I../brotli/enc/ -I../
+IDIRS=-I./brotli/dec/ -I./brotli/enc/ -I./src
 
 GFLAGS=-no-canonical-prefixes -fno-omit-frame-pointer -m64
 

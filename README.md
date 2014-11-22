@@ -22,7 +22,6 @@ git clone https://github.com/google/woff2.git
 cd woff2
 git submodule init
 git submodule update
-cd woff2
 make clean all
 ```
 
