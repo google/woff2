@@ -1,6 +1,17 @@
-#Converter makefile
+OS := $(shell uname)
 
-include shared.mk
+IDIRS=-I./brotli/dec/ -I./brotli/enc/ -I./src
+
+CPP = g++
+LFLAGS =
+GFLAGS=-no-canonical-prefixes -fno-omit-frame-pointer -m64
+CPPFLAGS = -c $(IDIRS) -std=c++0x $(GFLAGS)
+
+ifeq ($(OS), Darwin)
+  CPPFLAGS += -DOS_MACOSX
+else
+  CPPFLAGS += -fno-tree-vrp
+endif
 
 SRCDIR = src
 
