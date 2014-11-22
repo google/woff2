@@ -6,8 +6,6 @@ algorithm. Note that it is licensed under an Apache 2 license.
 
 woff2/ contains the C++ code for compressing and decompressing fonts.
 
-docs/ contains documents describing the proposed compression format.
-
 # Build & Run
 
 This document documents how to run the compression reference code. At this
