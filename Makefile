@@ -2,15 +2,15 @@ OS := $(shell uname)
 
 IDIRS=-I./brotli/dec/ -I./brotli/enc/ -I./src
 
-CPP = g++
+CXX = g++
 LFLAGS =
 GFLAGS=-no-canonical-prefixes -fno-omit-frame-pointer -m64
-CPPFLAGS = -c $(IDIRS) -std=c++0x $(GFLAGS)
+CXXFLAGS = -c $(IDIRS) -std=c++0x $(GFLAGS)
 
 ifeq ($(OS), Darwin)
-  CPPFLAGS += -DOS_MACOSX
+  CXXFLAGS += -DOS_MACOSX
 else
-  CPPFLAGS += -fno-tree-vrp
+  CXXFLAGS += -fno-tree-vrp
 endif
 
 SRCDIR = src
@@ -30,7 +30,7 @@ EXE_OBJS=$(patsubst %, $(SRCDIR)/%.o, $(EXECUTABLES))
 all : $(OBJS) $(EXECUTABLES)
 
 $(EXECUTABLES) : $(EXE_OBJS) deps
-	$(CPP) $(LFLAGS) $(OBJS) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
+	$(CXX) $(LFLAGS) $(OBJS) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
 
 deps :
 	make -C $(BROTLI)/dec
