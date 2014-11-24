@@ -107,7 +107,7 @@ bool ReadBase128(Buffer* buf, uint32_t* value) {
       return FONT_COMPRESSION_FAILURE();
     }
     // If any of the top seven bits are set then we're about to overflow.
-    if (result & 0xe0000000) {
+    if (result & 0xfe000000) {
       return FONT_COMPRESSION_FAILURE();
     }
     result = (result << 7) | (code & 0x7f);
