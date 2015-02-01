@@ -807,7 +807,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   }
   // We don't care about these fields of the header:
   //   uint16_t reserved
-  //   uint32_t total_sfnt_size
+  //   uint32_t total_sfnt_size, the caller already passes it as result_length
   if (!file.Skip(6)) {
     return FONT_COMPRESSION_FAILURE();
   }
@@ -926,7 +926,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   if (uncompressed_sum > 30 * 1024 * 1024) {
     return FONT_COMPRESSION_FAILURE();
   }
-  if (src_offset > length || dst_offset > result_length) {
+  if (src_offset > length || dst_offset != result_length) {
     fprintf(stderr, "offset fail; src_offset %lu length %lu "
       "dst_offset %lu result_length %lu\n",
       src_offset, length, dst_offset, result_length);
