@@ -817,10 +817,32 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   }
   // We don't care about these fields of the header:
   //   uint16_t major_version, minor_version
-  //   uint32_t meta_offset, meta_length, meta_orig_length
-  //   uint32_t priv_offset, priv_length
-  if (!file.Skip(24)) {
+  if (!file.Skip(2 * 2)) {
     return FONT_COMPRESSION_FAILURE();
+  }
+  uint32_t meta_offset;
+  uint32_t meta_length;
+  uint32_t meta_length_orig;
+  if (!file.ReadU32(&meta_offset) ||
+      !file.ReadU32(&meta_length) ||
+      !file.ReadU32(&meta_length_orig)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (meta_offset) {
+    if (meta_offset >= length || length - meta_offset < meta_length) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+  }
+  uint32_t priv_offset;
+  uint32_t priv_length;
+  if (!file.ReadU32(&priv_offset) ||
+      !file.ReadU32(&priv_length)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (priv_offset) {
+    if (priv_offset >= length || length - priv_offset < priv_length) {
+      return FONT_COMPRESSION_FAILURE();
+    }
   }
   std::vector<Table> tables(num_tables);
   if (!ReadTableDirectory(&file, &tables, num_tables)) {
@@ -949,6 +971,30 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   } else {
     // non-collection; we can just sort the tables
     std::sort(tables.begin(), tables.end());
+  }
+
+  if (meta_offset) {
+    if (src_offset != meta_offset) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+    src_offset = Round4(meta_offset + meta_length);
+    if (src_offset > std::numeric_limits<uint32_t>::max()) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+  }
+
+  if (priv_offset) {
+    if (src_offset != priv_offset) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+    src_offset = Round4(priv_offset + priv_length);
+    if (src_offset > std::numeric_limits<uint32_t>::max()) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+  }
+
+  if (src_offset != Round4(length)) {
+    return FONT_COMPRESSION_FAILURE();
   }
 
   // Start building the font
