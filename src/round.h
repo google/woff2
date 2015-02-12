@@ -17,7 +17,7 @@
 #ifndef WOFF2_ROUND_H_
 #define WOFF2_ROUND_H_
 
-#include <limits.h>
+#include <limits>
 
 namespace woff2 {
 

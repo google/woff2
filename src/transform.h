@@ -14,8 +14,8 @@
 //
 // Library for preprocessing fonts as part of the WOFF 2.0 conversion.
 
-#ifndef WOFF2_TOOLS_TRANSFORM_H_
-#define WOFF2_TOOLS_TRANSFORM_H_
+#ifndef WOFF2_TRANSFORM_H_
+#define WOFF2_TRANSFORM_H_
 
 #include "./font.h"
 

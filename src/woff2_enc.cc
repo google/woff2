@@ -61,14 +61,30 @@ void StoreBase128(size_t len, size_t* offset, uint8_t* dst) {
   }
 }
 
-bool Woff2Compress(const uint8_t* data, const size_t len,
-                   uint8_t* result, uint32_t* result_len) {
+bool Compress(const uint8_t* data, const size_t len,
+              uint8_t* result, uint32_t* result_len,
+              brotli::BrotliParams::Mode mode) {
   size_t compressed_len = *result_len;
   brotli::BrotliParams params;
-  params.mode = brotli::BrotliParams::MODE_FONT;
-  brotli::BrotliCompressBuffer(params, len, data, &compressed_len, result);
+  params.mode = mode;
+  if (brotli::BrotliCompressBuffer(params, len, data, &compressed_len, result)
+      == 0) {
+    return false;
+  }
   *result_len = compressed_len;
   return true;
+}
+
+bool Woff2Compress(const uint8_t* data, const size_t len,
+                   uint8_t* result, uint32_t* result_len) {
+  return Compress(data, len, result, result_len,
+                  brotli::BrotliParams::MODE_FONT);
+}
+
+bool TextCompress(const uint8_t* data, const size_t len,
+                   uint8_t* result, uint32_t* result_len) {
+  return Compress(data, len, result, result_len,
+                  brotli::BrotliParams::MODE_TEXT);
 }
 
 bool ReadLongDirectory(Buffer* file, std::vector<Table>* tables,
@@ -236,10 +252,10 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   std::vector<uint8_t> compressed_metadata_buf(compressed_metadata_buf_length);
 
   if (extended_metadata.length() > 0) {
-    if (!Woff2Compress((const uint8_t*)extended_metadata.data(),
-                       extended_metadata.length(),
-                       compressed_metadata_buf.data(),
-                       &compressed_metadata_buf_length)) {
+    if (!TextCompress((const uint8_t*)extended_metadata.data(),
+                      extended_metadata.length(),
+                      compressed_metadata_buf.data(),
+                      &compressed_metadata_buf_length)) {
       fprintf(stderr, "Compression of extended metadata failed.\n");
       return false;
     }
