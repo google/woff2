@@ -21,6 +21,7 @@
 #include <cstring>
 #include <limits>
 #include <string>
+#include <algorithm>
 #include <vector>
 
 #include "./buffer.h"
@@ -824,8 +825,13 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   offset = Store16(result, offset, output_search_range);
   offset = Store16(result, offset, max_pow2);
   offset = Store16(result, offset, (num_tables << 4) - output_search_range);
+
+  // sort tags in the table directory in ascending alphabetical order
+  std::vector<Table> sorted_tables(tables);
+  std::sort(sorted_tables.begin(), sorted_tables.end());
+
   for (uint16_t i = 0; i < num_tables; ++i) {
-    const Table* table = &tables[i];
+    const Table* table = &sorted_tables[i];
     offset = StoreU32(result, offset, table->tag);
     offset = StoreU32(result, offset, 0);  // checksum, to fill in later
     offset = StoreU32(result, offset, table->dst_offset);
@@ -889,7 +895,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     }
   }
 
-  return FixChecksums(tables, result);
+  return FixChecksums(sorted_tables, result);
 }
 
 } // namespace woff2
