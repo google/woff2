@@ -22,6 +22,7 @@
 #include "./font.h"
 #include "./glyph.h"
 #include "./table_tags.h"
+#include "./variable_length.h"
 
 namespace woff2 {
 
@@ -53,22 +54,6 @@ void WriteLong(std::vector<uint8_t>* out, int value) {
   out->push_back((value >> 16) & 255);
   out->push_back((value >> 8) & 255);
   out->push_back(value & 255);
-}
-
-void Write255UShort(std::vector<uint8_t>* out, int value) {
-  if (value < 253) {
-    out->push_back(value);
-  } else if (value < 506) {
-    out->push_back(255);
-    out->push_back(value - 253);
-  } else if (value < 762) {
-    out->push_back(254);
-    out->push_back(value - 506);
-  } else {
-    out->push_back(253);
-    out->push_back(value >> 8);
-    out->push_back(value & 0xff);
-  }
 }
 
 // Glyf table preprocessing, based on
@@ -228,9 +213,18 @@ class GlyfEncoder {
 
 bool TransformGlyfAndLocaTables(Font* font) {
   // no transform for CFF
+  const Font::Table* glyf_table = font->FindTable(kGlyfTableTag);
+  const Font::Table* loca_table = font->FindTable(kLocaTableTag);
   if (font->FindTable(kCffTableTag) != NULL
-      && font->FindTable(kGlyfTableTag) == NULL
-      && font->FindTable(kLocaTableTag) == NULL) {
+      && glyf_table == NULL
+      && loca_table == NULL) {
+    return true;
+  }
+  // Must share neither or both loca/glyf
+  if (glyf_table->IsReused() != loca_table->IsReused()) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (glyf_table->IsReused()) {
     return true;
   }
   Font::Table* transformed_glyf = &font->tables[kGlyfTableTag ^ 0x80808080];

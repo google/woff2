@@ -26,6 +26,7 @@
 #include "./round.h"
 #include "./store_bytes.h"
 #include "./table_tags.h"
+#include "./woff2_common.h"
 
 namespace woff2 {
 
@@ -123,6 +124,9 @@ bool MakeEditableBuffer(Font* font, int tableTag) {
   if (table == NULL) {
     return FONT_COMPRESSION_FAILURE();
   }
+  if (table->IsReused()) {
+    return true;
+  }
   int sz = Round4(table->length);
   table->buffer.resize(sz);
   uint8_t* buf = &table->buffer[0];
@@ -148,6 +152,15 @@ bool NormalizeGlyphs(Font* font) {
   if (loca_table == NULL || glyf_table == NULL) {
     return FONT_COMPRESSION_FAILURE();
   }
+
+  // Must share neither or both loca & glyf
+  if (loca_table->IsReused() != glyf_table->IsReused()) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (loca_table->IsReused()) {
+    return true;
+  }
+
   int index_fmt = head_table->data[51];
   int num_glyphs = NumGlyphs(*font);
 
@@ -184,25 +197,15 @@ bool NormalizeGlyphs(Font* font) {
 
 bool NormalizeOffsets(Font* font) {
   uint32_t offset = 12 + 16 * font->num_tables;
-  for (auto& i : font->tables) {
-    i.second.offset = offset;
-    offset += Round4(i.second.length);
+  for (auto tag : font->OutputOrderedTags()) {
+    auto& table = font->tables[tag];
+    table.offset = offset;
+    offset += Round4(table.length);
   }
   return true;
 }
 
 namespace {
-
-uint32_t ComputeChecksum(const uint8_t* buf, size_t size) {
-  uint32_t checksum = 0;
-  for (size_t i = 0; i < size; i += 4) {
-    checksum += ((buf[i] << 24) |
-                 (buf[i + 1] << 16) |
-                 (buf[i + 2] << 8) |
-                 buf[i + 3]);
-  }
-  return checksum;
-}
 
 uint32_t ComputeHeaderChecksum(const Font& font) {
   uint32_t checksum = font.flavor;
@@ -224,6 +227,9 @@ uint32_t ComputeHeaderChecksum(const Font& font) {
 
 bool FixChecksums(Font* font) {
   Font::Table* head_table = font->FindTable(kHeadTableTag);
+  if (head_table->reuse_of != NULL) {
+    head_table = head_table->reuse_of;
+  }
   if (head_table == NULL || head_table->length < 12) {
     return FONT_COMPRESSION_FAILURE();
   }
@@ -233,21 +239,68 @@ bool FixChecksums(Font* font) {
   uint32_t file_checksum = 0;
   for (auto& i : font->tables) {
     Font::Table* table = &i.second;
-    table->checksum = ComputeChecksum(table->data, table->length);
+    if (table->IsReused()) {
+      table = table->reuse_of;
+    }
+    table->checksum = ComputeULongSum(table->data, table->length);
     file_checksum += table->checksum;
   }
+
   file_checksum += ComputeHeaderChecksum(*font);
   offset = 8;
   StoreU32(0xb1b0afba - file_checksum, &offset, head_buf);
   return true;
 }
 
-bool NormalizeFont(Font* font) {
+bool NormalizeWithoutFixingChecksums(Font* font) {
   return (MakeEditableBuffer(font, kHeadTableTag) &&
           RemoveDigitalSignature(font) &&
           NormalizeGlyphs(font) &&
-          NormalizeOffsets(font) &&
+          NormalizeOffsets(font));
+}
+
+bool NormalizeFont(Font* font) {
+  return (NormalizeWithoutFixingChecksums(font) &&
           FixChecksums(font));
+}
+
+bool NormalizeFontCollection(FontCollection* font_collection) {
+  if (font_collection->fonts.size() == 1) {
+    return NormalizeFont(&font_collection->fonts[0]);
+  }
+
+  uint32_t offset = CollectionHeaderSize(font_collection->header_version,
+    font_collection->fonts.size());
+  for (auto& font : font_collection->fonts) {
+    if (!NormalizeWithoutFixingChecksums(&font)) {
+      fprintf(stderr, "Font normalization failed.\n");
+      return false;
+    }
+    offset += kSfntHeaderSize + kSfntEntrySize * font.num_tables;
+  }
+
+  // Start table offsets after TTC Header and Sfnt Headers
+  for (auto& font : font_collection->fonts) {
+    for (auto tag : font.OutputOrderedTags()) {
+      Font::Table& table = font.tables[tag];
+      if (table.IsReused()) {
+        table.offset = table.reuse_of->offset;
+      } else {
+        table.offset = offset;
+        offset += Round4(table.length);
+      }
+    }
+  }
+
+  // Now we can fix the checksums
+  for (auto& font : font_collection->fonts) {
+    if (!FixChecksums(&font)) {
+      fprintf(stderr, "Failed to fix checksums\n");
+      return false;
+    }
+  }
+
+  return true;
 }
 
 } // namespace woff2
