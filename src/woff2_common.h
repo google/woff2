@@ -17,7 +17,10 @@
 #ifndef WOFF2_WOFF2_COMMON_H_
 #define WOFF2_WOFF2_COMMON_H_
 
+#include <stddef.h>
 #include <inttypes.h>
+
+#include <string>
 
 namespace woff2 {
 
@@ -25,6 +28,12 @@ static const uint32_t kWoff2Signature = 0x774f4632;  // "wOF2"
 
 const unsigned int kWoff2FlagsContinueStream = 1 << 4;
 const unsigned int kWoff2FlagsTransform = 1 << 5;
+
+// TrueType Collection ID string: 'ttcf'
+static const uint32_t kTtcFontFlavor = 0x74746366;
+
+static const size_t kSfntHeaderSize = 12;
+static const size_t kSfntEntrySize = 16;
 
 struct Point {
   int x;
@@ -43,11 +52,16 @@ struct Table {
   uint32_t dst_offset;
   uint32_t dst_length;
   const uint8_t* dst_data;
-
-  bool operator<(const Table& other) const {
-    return tag < other.tag;
-  }
 };
+
+
+// Size of the collection header. 0 if version indicates this isn't a
+// collection. Ref http://www.microsoft.com/typography/otspec/otff.htm,
+// True Type Collections
+size_t CollectionHeaderSize(uint32_t header_version, uint32_t num_fonts);
+
+// Compute checksum over size bytes of buf
+uint32_t ComputeULongSum(const uint8_t* buf, size_t size);
 
 } // namespace woff2
 

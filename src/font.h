@@ -41,25 +41,54 @@ struct Font {
 
     // Buffer used to mutate the data before writing out.
     std::vector<uint8_t> buffer;
+
+    // If we've seen this tag/offset before, pointer to the first time we saw it
+    // If this is the first time we've seen this table, NULL
+    // Intended use is to bypass re-processing tables
+    Font::Table* reuse_of;
+
+    // Is this table reused by a TTC
+    bool IsReused() const;
   };
   std::map<uint32_t, Table> tables;
+  std::vector<uint32_t> OutputOrderedTags() const;
 
   Table* FindTable(uint32_t tag);
   const Table* FindTable(uint32_t tag) const;
 };
 
+// Accomodates both singular (OTF, TTF) and collection (TTC) fonts
+struct FontCollection {
+  uint32_t header_version;
+  // (offset, first use of table*) pairs
+  std::map<uint32_t, Font::Table*> tables;
+  std::vector<Font> fonts;
+};
+
 // Parses the font from the given data. Returns false on parsing failure or
 // buffer overflow. The font is valid only so long the input data pointer is
-// valid.
+// valid. Does NOT support collections.
 bool ReadFont(const uint8_t* data, size_t len, Font* font);
+
+// Parses the font from the given data. Returns false on parsing failure or
+// buffer overflow. The font is valid only so long the input data pointer is
+// valid. Supports collections.
+bool ReadFontCollection(const uint8_t* data, size_t len, FontCollection* fonts);
 
 // Returns the file size of the font.
 size_t FontFileSize(const Font& font);
+size_t FontCollectionFileSize(const FontCollection& font);
 
 // Writes the font into the specified dst buffer. The dst_size should be the
 // same as returned by FontFileSize(). Returns false upon buffer overflow (which
 // should not happen if dst_size was computed by FontFileSize()).
 bool WriteFont(const Font& font, uint8_t* dst, size_t dst_size);
+// Write the font at a specific offset, optionally reordering tables
+bool WriteFont(const Font& font, size_t* offset, uint8_t* dst, size_t dst_size,
+               bool reorder_tables);
+
+bool WriteFontCollection(const FontCollection& font_collection, uint8_t* dst,
+                         size_t dst_size);
 
 // Returns the number of glyphs in the font.
 // NOTE: Currently this works only for TrueType-flavored fonts, will return

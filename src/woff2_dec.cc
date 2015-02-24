@@ -21,14 +21,15 @@
 #include <cstring>
 #include <limits>
 #include <string>
-#include <algorithm>
 #include <vector>
+#include <map>
 
 #include "./buffer.h"
 #include "./decode.h"
 #include "./round.h"
 #include "./store_bytes.h"
 #include "./table_tags.h"
+#include "./variable_length.h"
 #include "./woff2_common.h"
 
 namespace woff2 {
@@ -56,70 +57,17 @@ const int FLAG_WE_HAVE_AN_X_AND_Y_SCALE = 1 << 6;
 const int FLAG_WE_HAVE_A_TWO_BY_TWO = 1 << 7;
 const int FLAG_WE_HAVE_INSTRUCTIONS = 1 << 8;
 
-const size_t kSfntHeaderSize = 12;
-const size_t kSfntEntrySize = 16;
 const size_t kCheckSumAdjustmentOffset = 8;
 
 const size_t kEndPtsOfContoursOffset = 10;
 const size_t kCompositeGlyphBegin = 10;
 
-// Based on section 6.1.1 of MicroType Express draft spec
-bool Read255UShort(Buffer* buf, unsigned int* value) {
-  static const int kWordCode = 253;
-  static const int kOneMoreByteCode2 = 254;
-  static const int kOneMoreByteCode1 = 255;
-  static const int kLowestUCode = 253;
-  uint8_t code = 0;
-  if (!buf->ReadU8(&code)) {
-    return FONT_COMPRESSION_FAILURE();
-  }
-  if (code == kWordCode) {
-    uint16_t result = 0;
-    if (!buf->ReadU16(&result)) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    *value = result;
-    return true;
-  } else if (code == kOneMoreByteCode1) {
-    uint8_t result = 0;
-    if (!buf->ReadU8(&result)) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    *value = result + kLowestUCode;
-    return true;
-  } else if (code == kOneMoreByteCode2) {
-    uint8_t result = 0;
-    if (!buf->ReadU8(&result)) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    *value = result + kLowestUCode * 2;
-    return true;
-  } else {
-    *value = code;
-    return true;
-  }
-}
-
-bool ReadBase128(Buffer* buf, uint32_t* value) {
-  uint32_t result = 0;
-  for (size_t i = 0; i < 5; ++i) {
-    uint8_t code = 0;
-    if (!buf->ReadU8(&code)) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    // If any of the top seven bits are set then we're about to overflow.
-    if (result & 0xfe000000) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    result = (result << 7) | (code & 0x7f);
-    if ((code & 0x80) == 0) {
-      *value = result;
-      return true;
-    }
-  }
-  // Make sure not to exceed the size bound
-  return FONT_COMPRESSION_FAILURE();
-}
+// metadata for a TTC font entry
+struct TtcFont {
+  uint32_t flavor;
+  uint32_t dst_offset;
+  std::vector<uint16_t> table_indices;
+};
 
 int WithSign(int flag, int baseval) {
   // Precondition: 0 <= baseval < 65536 (to avoid integer overflow)
@@ -394,7 +342,7 @@ bool ProcessComposite(Buffer* composite_stream, uint8_t* dst,
 
 // Build TrueType loca table
 bool StoreLoca(const std::vector<uint32_t>& loca_values, int index_format,
-    uint8_t* dst, size_t dst_size) {
+               uint8_t* dst, size_t dst_size) {
   const uint64_t loca_size = loca_values.size();
   const uint64_t offset_size = index_format ? 4 : 2;
   if ((loca_size << 2) >> 2 != loca_size) {
@@ -417,8 +365,8 @@ bool StoreLoca(const std::vector<uint32_t>& loca_values, int index_format,
 
 // Reconstruct entire glyf table based on transformed original
 bool ReconstructGlyf(const uint8_t* data, size_t data_size,
-    uint8_t* dst, size_t dst_size,
-    uint8_t* loca_buf, size_t loca_size) {
+                     uint8_t* dst, size_t dst_size,
+                     uint8_t* loca_buf, size_t loca_size) {
   static const int kNumSubStreams = 7;
   Buffer file(data, data_size);
   uint32_t version;
@@ -433,6 +381,7 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
       !file.ReadU16(&index_format)) {
     return FONT_COMPRESSION_FAILURE();
   }
+
   unsigned int offset = (2 + kNumSubStreams) * 4;
   if (offset > data_size) {
     return FONT_COMPRESSION_FAILURE();
@@ -595,26 +544,33 @@ const Table* FindTable(const std::vector<Table>& tables, uint32_t tag) {
   return NULL;
 }
 
+bool ReconstructTransformedGlyf(const uint8_t* transformed_buf,
+    size_t transformed_size, const Table* glyf_table, const Table* loca_table,
+    uint8_t* dst, size_t dst_length) {
+  if (glyf_table == NULL || loca_table == NULL) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (static_cast<uint64_t>(glyf_table->dst_offset + glyf_table->dst_length) >
+      dst_length) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (static_cast<uint64_t>(loca_table->dst_offset + loca_table->dst_length) >
+      dst_length) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  return ReconstructGlyf(transformed_buf, transformed_size,
+                         dst + glyf_table->dst_offset, glyf_table->dst_length,
+                         dst + loca_table->dst_offset, loca_table->dst_length);
+}
+
 bool ReconstructTransformed(const std::vector<Table>& tables, uint32_t tag,
     const uint8_t* transformed_buf, size_t transformed_size,
     uint8_t* dst, size_t dst_length) {
   if (tag == kGlyfTableTag) {
     const Table* glyf_table = FindTable(tables, tag);
     const Table* loca_table = FindTable(tables, kLocaTableTag);
-    if (glyf_table == NULL || loca_table == NULL) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    if (static_cast<uint64_t>(glyf_table->dst_offset + glyf_table->dst_length) >
-        dst_length) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    if (static_cast<uint64_t>(loca_table->dst_offset + loca_table->dst_length) >
-        dst_length) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    return ReconstructGlyf(transformed_buf, transformed_size,
-        dst + glyf_table->dst_offset, glyf_table->dst_length,
-        dst + loca_table->dst_offset, loca_table->dst_length);
+    return ReconstructTransformedGlyf(transformed_buf, transformed_size,
+                                      glyf_table, loca_table, dst, dst_length);
   } else if (tag == kLocaTableTag) {
     // processing was already done by glyf table, but validate
     if (!FindTable(tables, kGlyfTableTag)) {
@@ -627,14 +583,70 @@ bool ReconstructTransformed(const std::vector<Table>& tables, uint32_t tag,
   return true;
 }
 
-uint32_t ComputeChecksum(const uint8_t* buf, size_t size) {
-  uint32_t checksum = 0;
-  for (size_t i = 0; i < size; i += 4) {
-    // We assume the addition is mod 2^32, which is valid because unsigned
-    checksum += (buf[i] << 24) | (buf[i + 1] << 16) |
-      (buf[i + 2] << 8) | buf[i + 3];
+uint32_t ComputeChecksum(const Table* table, const uint8_t* dst) {
+  return ComputeULongSum(dst + table->dst_offset, table->dst_length);
+}
+
+const Table* FindTable(TtcFont ttc_font, const std::vector<Table>& tables,
+  uint32_t tag) {
+  for (const auto i : ttc_font.table_indices) {
+    if (tables[i].tag == tag) return &tables[i];
   }
-  return checksum;
+  return NULL;
+}
+
+bool FixCollectionChecksums(size_t header_version,
+  const std::vector<Table>& tables, const std::vector<TtcFont>& ttc_fonts,
+  uint8_t* dst) {
+  size_t offset = CollectionHeaderSize(header_version, ttc_fonts.size());
+
+  for (const auto& ttc_font : ttc_fonts) {
+    offset += 12;  // move to start of Offset Table
+    const std::vector<uint16_t>& table_indices = ttc_font.table_indices;
+
+    const Table* head_table = FindTable(ttc_font, tables, kHeadTableTag);
+    if (head_table == NULL ||
+        head_table->dst_length < kCheckSumAdjustmentOffset + 4) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+
+    size_t first_table_offset = std::numeric_limits<size_t>::max();
+    for (const auto index : table_indices) {
+      const auto& table = tables[index];
+      if (table.dst_offset < first_table_offset) {
+        first_table_offset = table.dst_offset;
+      }
+    }
+
+    size_t adjustment_offset = head_table->dst_offset
+      + kCheckSumAdjustmentOffset;
+    StoreU32(dst, adjustment_offset, 0);
+
+    uint32_t file_checksum = 0;
+    // compute each tables checksum
+    for (auto i = 0; i < table_indices.size(); i++) {
+      const Table& table = tables[table_indices[i]];
+      uint32_t table_checksum = ComputeChecksum(&table, dst);
+      size_t checksum_offset = offset + 4;  // skip past tag to checkSum
+
+      // write the checksum for the Table Record
+      StoreU32(dst, checksum_offset, table_checksum);
+      file_checksum += table_checksum;
+      // next Table Record
+      offset += 16;
+    }
+
+    size_t header_size = kSfntHeaderSize +
+      kSfntEntrySize * table_indices.size();
+    uint32_t header_checksum = ComputeULongSum(dst + ttc_font.dst_offset,
+                                               header_size);
+
+    file_checksum += header_checksum;
+    uint32_t checksum_adjustment = 0xb1b0afba - file_checksum;
+    StoreU32(dst, adjustment_offset, checksum_adjustment);
+  }
+
+  return true;
 }
 
 bool FixChecksums(const std::vector<Table>& tables, uint8_t* dst) {
@@ -648,15 +660,12 @@ bool FixChecksums(const std::vector<Table>& tables, uint8_t* dst) {
   size_t n_tables = tables.size();
   uint32_t file_checksum = 0;
   for (size_t i = 0; i < n_tables; ++i) {
-    const Table* table = &tables[i];
-    size_t table_length = table->dst_length;
-    uint8_t* table_data = dst + table->dst_offset;
-    uint32_t checksum = ComputeChecksum(table_data, table_length);
+    uint32_t checksum = ComputeChecksum(&tables[i], dst);
     StoreU32(dst, kSfntHeaderSize + i * kSfntEntrySize + 4, checksum);
     file_checksum += checksum;
   }
-  file_checksum += ComputeChecksum(dst,
-      kSfntHeaderSize + kSfntEntrySize * n_tables);
+  file_checksum += ComputeULongSum(dst,
+                                   kSfntHeaderSize + kSfntEntrySize * n_tables);
   uint32_t checksum_adjustment = 0xb1b0afba - file_checksum;
   StoreU32(dst, adjustment_offset, checksum_adjustment);
   return true;
@@ -673,7 +682,7 @@ bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,
   return true;
 }
 
-bool ReadShortDirectory(Buffer* file, std::vector<Table>* tables,
+bool ReadTableDirectory(Buffer* file, std::vector<Table>* tables,
     size_t num_tables) {
   for (size_t i = 0; i < num_tables; ++i) {
     Table* table = &(*tables)[i];
@@ -732,6 +741,48 @@ size_t ComputeWOFF2FinalSize(const uint8_t* data, size_t length) {
   return total_length;
 }
 
+// Writes a single Offset Table entry
+size_t StoreOffsetTable(uint8_t* result, size_t offset, uint32_t flavor,
+                        uint16_t num_tables) {
+  offset = StoreU32(result, offset, flavor);  // sfnt version
+  offset = Store16(result, offset, num_tables);  // num_tables
+  unsigned max_pow2 = 0;
+  while (1u << (max_pow2 + 1) <= num_tables) {
+    max_pow2++;
+  }
+  const uint16_t output_search_range = (1u << max_pow2) << 4;
+  offset = Store16(result, offset, output_search_range);  // searchRange
+  offset = Store16(result, offset, max_pow2);  // entrySelector
+  // rangeShift
+  offset = Store16(result, offset, (num_tables << 4) - output_search_range);
+  return offset;
+}
+
+size_t StoreTableEntry(uint8_t* result, const Table& table, size_t offset) {
+  offset = StoreU32(result, offset, table.tag);
+  offset = StoreU32(result, offset, 0);  // checksum, to fill in later
+  offset = StoreU32(result, offset, table.dst_offset);
+  offset = StoreU32(result, offset, table.dst_length);
+  return offset;
+}
+
+// First table goes after all the headers, table directory, etc
+uint64_t ComputeOffsetToFirstTable(const uint32_t header_version,
+                                   const uint16_t num_tables,
+                                   const std::vector<TtcFont>& ttc_fonts) {
+  uint64_t offset = kSfntHeaderSize +
+    kSfntEntrySize * static_cast<uint64_t>(num_tables);
+  if (header_version) {
+    offset = CollectionHeaderSize(header_version, ttc_fonts.size())
+      + kSfntHeaderSize * ttc_fonts.size();
+    for (const auto& ttc_font : ttc_fonts) {
+      offset +=
+        kSfntEntrySize * ttc_font.table_indices.size();
+    }
+  }
+  return offset;
+}
+
 bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
                        const uint8_t* data, size_t length) {
   Buffer file(data, length);
@@ -771,13 +822,83 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     return FONT_COMPRESSION_FAILURE();
   }
   std::vector<Table> tables(num_tables);
-  // Note: change below to ReadLongDirectory to enable long format.
-  if (!ReadShortDirectory(&file, &tables, num_tables)) {
+  if (!ReadTableDirectory(&file, &tables, num_tables)) {
     return FONT_COMPRESSION_FAILURE();
   }
+
+  uint32_t header_version = 0;
+  // for each font in a ttc, metadata to use when rebuilding
+  std::vector<TtcFont> ttc_fonts;
+  std::map<const Table*, const Table*> loca_by_glyf;
+
+  if (flavor == kTtcFontFlavor) {
+    if (!file.ReadU32(&header_version)) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+    uint32_t num_fonts;
+    if (!Read255UShort(&file, &num_fonts) || !num_fonts) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+    ttc_fonts.resize(num_fonts);
+
+    for (auto i = 0; i < num_fonts; i++) {
+      TtcFont& ttc_font = ttc_fonts[i];
+      uint32_t num_tables;
+      if (!Read255UShort(&file, &num_tables) || !num_tables) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+      if (!file.ReadU32(&ttc_font.flavor)) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+
+      ttc_font.table_indices.resize(num_tables);
+
+      const Table* glyf_table = NULL;
+      const Table* loca_table = NULL;
+      uint16_t glyf_idx;
+      uint16_t loca_idx;
+
+      for (auto j = 0; j < num_tables; j++) {
+        unsigned int table_idx;
+        if (!Read255UShort(&file, &table_idx)) {
+          return FONT_COMPRESSION_FAILURE();
+        }
+        ttc_font.table_indices[j] = table_idx;
+
+        const Table& table = tables[table_idx];
+        if (table.tag == kLocaTableTag) {
+          loca_table = &table;
+          loca_idx = table_idx;
+        }
+        if (table.tag == kGlyfTableTag) {
+          glyf_table = &table;
+          glyf_idx = table_idx;
+        }
+
+      }
+
+      if ((glyf_table == NULL) != (loca_table == NULL)) {
+        fprintf(stderr, "Cannot have just one of glyf/loca\n");
+        return FONT_COMPRESSION_FAILURE();
+      }
+
+      if (glyf_table != NULL && loca_table != NULL) {
+        loca_by_glyf[glyf_table] = loca_table;
+      }
+    }
+  }
+
+  const uint64_t first_table_offset =
+    ComputeOffsetToFirstTable(header_version, num_tables, ttc_fonts);
+
+  if (first_table_offset > result_length) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
   uint64_t src_offset = file.offset();
-  uint64_t dst_offset = kSfntHeaderSize +
-      kSfntEntrySize * static_cast<uint64_t>(num_tables);
+  uint64_t dst_offset = first_table_offset;
+
+
   uint64_t uncompressed_sum = 0;
   for (uint16_t i = 0; i < num_tables; ++i) {
     Table* table = &tables[i];
@@ -787,7 +908,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     if (src_offset > std::numeric_limits<uint32_t>::max()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    src_offset = Round4(src_offset);  // TODO: reconsider
+    src_offset = Round4(src_offset);
     table->dst_offset = dst_offset;
     dst_offset += table->dst_length;
     if (dst_offset > std::numeric_limits<uint32_t>::max()) {
@@ -805,38 +926,54 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     return FONT_COMPRESSION_FAILURE();
   }
   if (src_offset > length || dst_offset > result_length) {
-    return FONT_COMPRESSION_FAILURE();
-  }
-
-  const uint32_t sfnt_header_and_table_directory_size = 12 + 16 * num_tables;
-  if (sfnt_header_and_table_directory_size > result_length) {
+    fprintf(stderr, "offset fail; src_offset %lu length %lu "
+      "dst_offset %lu result_length %lu\n",
+      src_offset, length, dst_offset, result_length);
     return FONT_COMPRESSION_FAILURE();
   }
 
   // Start building the font
   size_t offset = 0;
-  offset = StoreU32(result, offset, flavor);
-  offset = Store16(result, offset, num_tables);
-  unsigned max_pow2 = 0;
-  while (1u << (max_pow2 + 1) <= num_tables) {
-    max_pow2++;
-  }
-  const uint16_t output_search_range = (1u << max_pow2) << 4;
-  offset = Store16(result, offset, output_search_range);
-  offset = Store16(result, offset, max_pow2);
-  offset = Store16(result, offset, (num_tables << 4) - output_search_range);
+  size_t offset_table = 0;
+  if (header_version) {
+    // TTC header
+    offset = StoreU32(result, offset, flavor);  // TAG TTCTag
+    offset = StoreU32(result, offset, header_version);  // FIXED Version
+    offset = StoreU32(result, offset, ttc_fonts.size());  // ULONG numFonts
+    // Space for ULONG OffsetTable[numFonts] (zeroed initially)
+    offset_table = offset;  // keep start of offset table for later
+    for (int i = 0; i < ttc_fonts.size(); i++) {
+      offset = StoreU32(result, offset, 0);  // will fill real values in later
+    }
+    // space for DSIG fields for header v2
+    if (header_version == 0x00020000) {
+      offset = StoreU32(result, offset, 0);  // ULONG ulDsigTag
+      offset = StoreU32(result, offset, 0);  // ULONG ulDsigLength
+      offset = StoreU32(result, offset, 0);  // ULONG ulDsigOffset
+    }
 
-  // sort tags in the table directory in ascending alphabetical order
-  std::vector<Table> sorted_tables(tables);
-  std::sort(sorted_tables.begin(), sorted_tables.end());
+    // write Offset Tables and store the location of each in TTC Header
+    for (auto& ttc_font : ttc_fonts) {
+      // write Offset Table location into TTC Header
+      offset_table = StoreU32(result, offset_table, offset);
 
-  for (uint16_t i = 0; i < num_tables; ++i) {
-    const Table* table = &sorted_tables[i];
-    offset = StoreU32(result, offset, table->tag);
-    offset = StoreU32(result, offset, 0);  // checksum, to fill in later
-    offset = StoreU32(result, offset, table->dst_offset);
-    offset = StoreU32(result, offset, table->dst_length);
+      // write the actual offset table so our header doesn't lie
+      ttc_font.dst_offset = offset;
+      offset = StoreOffsetTable(result, offset, ttc_font.flavor,
+                                ttc_font.table_indices.size());
+
+      // write table entries
+      for (const auto table_index : ttc_font.table_indices) {
+        offset = StoreTableEntry(result, tables[table_index], offset);
+      }
+    }
+  } else {
+    offset = StoreOffsetTable(result, offset, flavor, num_tables);
+    for (uint16_t i = 0; i < num_tables; ++i) {
+      offset = StoreTableEntry(result, tables[i], offset);
+    }
   }
+
   std::vector<uint8_t> uncompressed_buf;
   bool continue_valid = false;
   const uint8_t* transform_buf = NULL;
@@ -879,12 +1016,26 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
           result_length) {
         return FONT_COMPRESSION_FAILURE();
       }
+
       std::memcpy(result + table->dst_offset, transform_buf,
           transform_length);
     } else {
-      if (!ReconstructTransformed(tables, table->tag,
-            transform_buf, transform_length, result, result_length)) {
-        return FONT_COMPRESSION_FAILURE();
+      if (header_version) {
+        if (table->tag == kGlyfTableTag) {
+          const Table* loca_table = loca_by_glyf[table];
+          if (!ReconstructTransformedGlyf(transform_buf, transform_length,
+                  table, loca_table, result, result_length)) {
+            return FONT_COMPRESSION_FAILURE();
+          }
+        } else if (table->tag != kLocaTableTag) {
+          // transform for this tag not known
+          return FONT_COMPRESSION_FAILURE();
+        }
+      } else {
+        if (!ReconstructTransformed(tables, table->tag,
+                transform_buf, transform_length, result, result_length)) {
+          return FONT_COMPRESSION_FAILURE();
+        }
       }
     }
     if (continue_valid) {
@@ -895,7 +1046,17 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     }
   }
 
-  return FixChecksums(sorted_tables, result);
+  if (header_version) {
+    if (!FixCollectionChecksums(header_version, tables, ttc_fonts, result)) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+  } else {
+    if (!FixChecksums(tables, result)) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+  }
+
+  return true;
 }
 
 } // namespace woff2

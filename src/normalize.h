@@ -22,6 +22,7 @@
 namespace woff2 {
 
 struct Font;
+struct FontCollection;
 
 // Changes the offset fields of the table headers so that the data for the
 // tables will be written in order of increasing tag values, without any gaps
@@ -39,6 +40,7 @@ bool NormalizeGlyphs(Font* font);
 
 // Performs all of the normalization steps above.
 bool NormalizeFont(Font* font);
+bool NormalizeFontCollection(FontCollection* font_collection);
 
 } // namespace woff2
 
