@@ -306,7 +306,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
       const Font::Table& src_table = font.tables.at(tag);
 
       if (index_by_offset.find(src_table.offset) == index_by_offset.end()) {
-        index_by_offset[src_table.offset] = index_by_offset.size();
+        index_by_offset[src_table.offset] = tables.size();
       } else if (!src_table.IsReused()) {
         return false;
       }
