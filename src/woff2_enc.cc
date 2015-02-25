@@ -304,16 +304,14 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
 
     for (const auto tag : font.OutputOrderedTags()) {
       const Font::Table& src_table = font.tables.at(tag);
+      if (src_table.IsReused()) {
+        continue;
+      }
 
       if (index_by_offset.find(src_table.offset) == index_by_offset.end()) {
         index_by_offset[src_table.offset] = tables.size();
-      } else if (!src_table.IsReused()) {
+      } else {
         return false;
-      }
-
-
-      if (src_table.IsReused()) {
-        continue;
       }
 
       Table table;
