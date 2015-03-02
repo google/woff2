@@ -137,6 +137,35 @@ bool MakeEditableBuffer(Font* font, int tableTag) {
 
 }  // namespace
 
+namespace {
+
+bool SetHeadTransformFlag(Font* font) {
+  Font::Table* cff_table = font->FindTable(kCffTableTag);
+  Font::Table* head_table = font->FindTable(kHeadTableTag);
+  Font::Table* glyf_table = font->FindTable(kGlyfTableTag);
+  Font::Table* loca_table = font->FindTable(kLocaTableTag);
+  if (head_table->reuse_of != NULL) {
+    head_table = head_table->reuse_of;
+  }
+  if (head_table == NULL || head_table->length < 18) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  // if CFF-flavoured, there's no transform, hence no need to set flag
+  if (cff_table != NULL && loca_table == NULL && glyf_table == NULL) {
+    return true;
+  }
+  if (loca_table == NULL || glyf_table == NULL) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  // set bit 11 of head table 'flags' to indicate that font has undergone
+  // lossless modifying transform
+  int head_flags = head_table->data[16];
+  head_table->buffer[16] = head_flags | (1 << 3);
+  return true;
+}
+
+}  // namespace
+
 bool NormalizeGlyphs(Font* font) {
   Font::Table* cff_table = font->FindTable(kCffTableTag);
   Font::Table* head_table = font->FindTable(kHeadTableTag);
@@ -249,20 +278,6 @@ bool FixChecksums(Font* font) {
   file_checksum += ComputeHeaderChecksum(*font);
   offset = 8;
   StoreU32(0xb1b0afba - file_checksum, &offset, head_buf);
-  return true;
-}
-
-bool SetHeadTransformFlag(Font* font) {
-  Font::Table* head_table = font->FindTable(kHeadTableTag);
-  if (head_table->reuse_of != NULL) {
-    head_table = head_table->reuse_of;
-  }
-  if (head_table == NULL || head_table->length < 18) {
-    return FONT_COMPRESSION_FAILURE();
-  }
-  // set bit 11 of head table 'flags' to indicate lossless modifying transform
-  int head_flags = head_table->data[16];
-  head_table->buffer[16] = head_flags | (1 << 3);
   return true;
 }
 
