@@ -252,11 +252,26 @@ bool FixChecksums(Font* font) {
   return true;
 }
 
+bool SetHeadTransformFlag(Font* font) {
+  Font::Table* head_table = font->FindTable(kHeadTableTag);
+  if (head_table->reuse_of != NULL) {
+    head_table = head_table->reuse_of;
+  }
+  if (head_table == NULL || head_table->length < 18) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  // set bit 11 of head table 'flags' to indicate lossless modifying transform
+  int head_flags = head_table->data[16];
+  head_table->buffer[16] = head_flags | (1 << 3);
+  return true;
+}
+
 bool NormalizeWithoutFixingChecksums(Font* font) {
   return (MakeEditableBuffer(font, kHeadTableTag) &&
           RemoveDigitalSignature(font) &&
           NormalizeGlyphs(font) &&
-          NormalizeOffsets(font));
+          NormalizeOffsets(font) &&
+          SetHeadTransformFlag(font));
 }
 
 bool NormalizeFont(Font* font) {
