@@ -17,6 +17,7 @@
 #include "./woff2_dec.h"
 
 #include <stdlib.h>
+#include <algorithm>
 #include <complex>
 #include <cstring>
 #include <limits>
@@ -930,6 +931,24 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
       "dst_offset %lu result_length %lu\n",
       src_offset, length, dst_offset, result_length);
     return FONT_COMPRESSION_FAILURE();
+  }
+
+  // Re-order tables in output (OTSpec) order
+  if (header_version) {
+    // collection; we have to sort the table offset vector in each font
+    for (auto& ttc_font : ttc_fonts) {
+      std::map<uint32_t, uint16_t> sorted_index_by_tag;
+      for (auto table_index : ttc_font.table_indices) {
+        sorted_index_by_tag[tables[table_index].tag] = table_index;
+      }
+      uint16_t index = 0;
+      for (auto& i : sorted_index_by_tag) {
+        ttc_font.table_indices[index++] = i.second;
+      }
+    }
+  } else {
+    // non-collection; we can just sort the tables
+    std::sort(tables.begin(), tables.end());
   }
 
   // Start building the font

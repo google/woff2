@@ -217,7 +217,7 @@ size_t FontCollectionFileSize(const FontCollection& font_collection) {
 
 bool WriteFont(const Font& font, uint8_t* dst, size_t dst_size) {
   size_t offset = 0;
-  return WriteFont(font, &offset, dst, dst_size, true);
+  return WriteFont(font, &offset, dst, dst_size);
 }
 
 bool WriteTable(const Font::Table& table, size_t* offset, uint8_t* dst,
@@ -246,7 +246,7 @@ bool WriteTable(const Font::Table& table, size_t* offset, uint8_t* dst,
 }
 
 bool WriteFont(const Font& font, size_t* offset, uint8_t* dst,
-               size_t dst_size, bool reorder_tables) {
+               size_t dst_size) {
   if (dst_size < 12ULL + 16ULL * font.num_tables) {
     return FONT_COMPRESSION_FAILURE();
   }
@@ -258,19 +258,13 @@ bool WriteFont(const Font& font, size_t* offset, uint8_t* dst,
   Store16(search_range, offset, dst);
   Store16(max_pow2, offset, dst);
   Store16(range_shift, offset, dst);
-  if (reorder_tables) {
-    for (const auto tag : font.OutputOrderedTags()) {
-      if (!WriteTable(font.tables.at(tag), offset, dst, dst_size)) {
-        return false;
-      }
-    }
-  } else {
-    for (const auto& i : font.tables) {
-      if (!WriteTable(i.second, offset, dst, dst_size)) {
-        return false;
-      }
+
+  for (const auto& i : font.tables) {
+    if (!WriteTable(i.second, offset, dst, dst_size)) {
+      return false;
     }
   }
+
   return true;
 }
 
@@ -280,7 +274,7 @@ bool WriteFontCollection(const FontCollection& font_collection, uint8_t* dst,
 
   // It's simpler if this just a simple sfnt
   if (font_collection.fonts.size() == 1) {
-    return WriteFont(font_collection.fonts[0], &offset, dst, dst_size, true);
+    return WriteFont(font_collection.fonts[0], &offset, dst, dst_size);
   }
 
   // Write TTC header
@@ -304,7 +298,7 @@ bool WriteFontCollection(const FontCollection& font_collection, uint8_t* dst,
   for (int i = 0; i < font_collection.fonts.size(); i++) {
     const auto& font = font_collection.fonts[i];
     StoreU32(offset, &offset_table, dst);
-    if (!WriteFont(font, &offset, dst, dst_size, false)) {
+    if (!WriteFont(font, &offset, dst, dst_size)) {
       return false;
     }
   }

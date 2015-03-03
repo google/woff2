@@ -83,9 +83,8 @@ size_t FontCollectionFileSize(const FontCollection& font);
 // same as returned by FontFileSize(). Returns false upon buffer overflow (which
 // should not happen if dst_size was computed by FontFileSize()).
 bool WriteFont(const Font& font, uint8_t* dst, size_t dst_size);
-// Write the font at a specific offset, optionally reordering tables
-bool WriteFont(const Font& font, size_t* offset, uint8_t* dst, size_t dst_size,
-               bool reorder_tables);
+// Write the font at a specific offset
+bool WriteFont(const Font& font, size_t* offset, uint8_t* dst, size_t dst_size);
 
 bool WriteFontCollection(const FontCollection& font_collection, uint8_t* dst,
                          size_t dst_size);

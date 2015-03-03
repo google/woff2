@@ -52,6 +52,10 @@ struct Table {
   uint32_t dst_offset;
   uint32_t dst_length;
   const uint8_t* dst_data;
+
+  bool operator<(const Table& other) const {
+    return tag < other.tag;
+  }
 };
 
 
