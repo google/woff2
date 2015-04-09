@@ -215,10 +215,14 @@ uint32_t ComputeHeaderChecksum(const Font& font) {
   checksum += (font.num_tables << 16 | search_range);
   checksum += (max_pow2 << 16 | range_shift);
   for (const auto& i : font.tables) {
-    checksum += i.second.tag;
-    checksum += i.second.checksum;
-    checksum += i.second.offset;
-    checksum += i.second.length;
+    const Font::Table* table = &i.second;
+    if (table->IsReused()) {
+      table = table->reuse_of;
+    }
+    checksum += table->tag;
+    checksum += table->checksum;
+    checksum += table->offset;
+    checksum += table->length;
   }
   return checksum;
 }
@@ -227,16 +231,21 @@ uint32_t ComputeHeaderChecksum(const Font& font) {
 
 bool FixChecksums(Font* font) {
   Font::Table* head_table = font->FindTable(kHeadTableTag);
+  if (head_table == NULL) {
+    return FONT_COMPRESSION_FAILURE();
+  }
   if (head_table->reuse_of != NULL) {
     head_table = head_table->reuse_of;
   }
-  if (head_table == NULL || head_table->length < 12) {
+  if (head_table->length < 12) {
     return FONT_COMPRESSION_FAILURE();
   }
+
   uint8_t* head_buf = &head_table->buffer[0];
   size_t offset = 8;
   StoreU32(0, &offset, head_buf);
   uint32_t file_checksum = 0;
+  uint32_t head_checksum = 0;
   for (auto& i : font->tables) {
     Font::Table* table = &i.second;
     if (table->IsReused()) {
@@ -244,17 +253,44 @@ bool FixChecksums(Font* font) {
     }
     table->checksum = ComputeULongSum(table->data, table->length);
     file_checksum += table->checksum;
+
+    if (table->tag == kHeadTableTag) {
+      head_checksum = table->checksum;
+    }
   }
 
   file_checksum += ComputeHeaderChecksum(*font);
   offset = 8;
   StoreU32(0xb1b0afba - file_checksum, &offset, head_buf);
+
   return true;
 }
+
+namespace {
+bool MarkTransformed(Font* font) {
+  Font::Table* head_table = font->FindTable(kHeadTableTag);
+  if (head_table == NULL) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (head_table->reuse_of != NULL) {
+    head_table = head_table->reuse_of;
+  }
+  if (head_table->length < 17) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  // set bit 11 of head table 'flags' to indicate that font has undergone
+  // lossless modifying transform
+  int head_flags = head_table->data[16];
+  head_table->buffer[16] = head_flags | 0x08;
+  return true;
+}
+}  // namespace
+
 
 bool NormalizeWithoutFixingChecksums(Font* font) {
   return (MakeEditableBuffer(font, kHeadTableTag) &&
           RemoveDigitalSignature(font) &&
+          MarkTransformed(font) &&
           NormalizeGlyphs(font) &&
           NormalizeOffsets(font));
 }

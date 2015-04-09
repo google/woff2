@@ -223,20 +223,33 @@ bool WriteFont(const Font& font, uint8_t* dst, size_t dst_size) {
   return WriteFont(font, &offset, dst, dst_size);
 }
 
+bool WriteTableRecord(const Font::Table* table, size_t* offset, uint8_t* dst,
+                      size_t dst_size) {
+  if (dst_size < *offset + kSfntEntrySize) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (table->IsReused()) {
+    table = table->reuse_of;
+  }
+  StoreU32(table->tag, offset, dst);
+  StoreU32(table->checksum, offset, dst);
+  StoreU32(table->offset, offset, dst);
+  StoreU32(table->length, offset, dst);
+  return true;
+}
+
 bool WriteTable(const Font::Table& table, size_t* offset, uint8_t* dst,
                 size_t dst_size) {
-  StoreU32(table.tag, offset, dst);
-  StoreU32(table.checksum, offset, dst);
-  StoreU32(table.offset, offset, dst);
-  StoreU32(table.length, offset, dst);
-
-  if (table.offset + table.length < table.offset ||
-      dst_size < table.offset + table.length) {
-    return FONT_COMPRESSION_FAILURE();
+  if (!WriteTableRecord(&table, offset, dst, dst_size)) {
+    return false;
   }
 
   // Write the actual table data if it's the first time we've seen it
   if (!table.IsReused()) {
+    if (table.offset + table.length < table.offset ||
+        dst_size < table.offset + table.length) {
+      return FONT_COMPRESSION_FAILURE();
+    }
     memcpy(dst + table.offset, table.data, table.length);
     size_t padding_size = (4 - (table.length & 3)) & 3;
     if (table.offset + table.length + padding_size < padding_size ||
