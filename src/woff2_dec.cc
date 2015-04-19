@@ -720,6 +720,9 @@ bool ReadTableDirectory(Buffer* file, std::vector<Table>* tables,
       if (!ReadBase128(file, &transform_length)) {
         return FONT_COMPRESSION_FAILURE();
       }
+      if (tag == kLocaTableTag && transform_length) {
+        return FONT_COMPRESSION_FAILURE();
+      }
     }
     table->tag = tag;
     table->flags = flags;
