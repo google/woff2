@@ -58,11 +58,10 @@ void WriteLong(std::vector<uint8_t>* out, int value) {
 
 // Glyf table preprocessing, based on
 // GlyfEncoder.java
-// but only the "sbbox" and "cbbox" options are supported.
 class GlyfEncoder {
  public:
   explicit GlyfEncoder(int num_glyphs)
-      : sbbox_(false), cbbox_(true), n_glyphs_(num_glyphs) {
+      : n_glyphs_(num_glyphs) {
     bbox_bitmap_.resize(((num_glyphs + 31) >> 5) << 2);
   }
 
@@ -105,10 +104,40 @@ class GlyfEncoder {
                glyph.instructions_data, glyph.instructions_size);
   }
 
+  bool ShouldWriteSimpleGlyphBbox(const Glyph& glyph) {
+    if (glyph.contours.empty() || glyph.contours[0].empty()) {
+      return glyph.x_min || glyph.y_min || glyph.x_max || glyph.y_max;
+    }
+
+    int16_t x_min = glyph.contours[0][0].x;
+    int16_t y_min = glyph.contours[0][0].y;
+    int16_t x_max = x_min;
+    int16_t y_max = y_min;
+    for (const auto& contour : glyph.contours) {
+      for (const auto& point : contour) {
+        if (point.x < x_min) x_min = point.x;
+        if (point.x > x_max) x_max = point.x;
+        if (point.y < y_min) y_min = point.y;
+        if (point.y > y_max) y_max = point.y;
+      }
+    }
+
+    if (glyph.x_min != x_min)
+      return true;
+    if (glyph.y_min != y_min)
+      return true;
+    if (glyph.x_max != x_max)
+      return true;
+    if (glyph.y_max != y_max)
+      return true;
+
+    return false;
+  }
+
   void WriteSimpleGlyph(int glyph_id, const Glyph& glyph) {
     int num_contours = glyph.contours.size();
     WriteUShort(&n_contour_stream_, num_contours);
-    if (sbbox_) {
+    if (ShouldWriteSimpleGlyphBbox(glyph)) {
       WriteBbox(glyph_id, glyph);
     }
     // TODO: check that bbox matches, write bbox if not
@@ -136,9 +165,7 @@ class GlyfEncoder {
 
   void WriteCompositeGlyph(int glyph_id, const Glyph& glyph) {
     WriteUShort(&n_contour_stream_, -1);
-    if (cbbox_) {
-      WriteBbox(glyph_id, glyph);
-    }
+    WriteBbox(glyph_id, glyph);
     WriteBytes(&composite_stream_,
                glyph.composite_data,
                glyph.composite_data_size);
@@ -204,8 +231,6 @@ class GlyfEncoder {
   std::vector<uint8_t> bbox_stream_;
   std::vector<uint8_t> glyph_stream_;
   std::vector<uint8_t> instruction_stream_;
-  bool sbbox_;
-  bool cbbox_;
   int n_glyphs_;
 };
 

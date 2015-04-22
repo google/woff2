@@ -40,28 +40,6 @@ void StoreLoca(int index_fmt, uint32_t value, size_t* offset, uint8_t* dst) {
   }
 }
 
-void NormalizeSimpleGlyphBoundingBox(Glyph* glyph) {
-  if (glyph->contours.empty() || glyph->contours[0].empty()) {
-    return;
-  }
-  int16_t x_min = glyph->contours[0][0].x;
-  int16_t y_min = glyph->contours[0][0].y;
-  int16_t x_max = x_min;
-  int16_t y_max = y_min;
-  for (const auto& contour : glyph->contours) {
-    for (const auto& point : contour) {
-      if (point.x < x_min) x_min = point.x;
-      if (point.x > x_max) x_max = point.x;
-      if (point.y < y_min) y_min = point.y;
-      if (point.y > y_max) y_max = point.y;
-    }
-  }
-  glyph->x_min = x_min;
-  glyph->y_min = y_min;
-  glyph->x_max = x_max;
-  glyph->y_max = y_max;
-}
-
 }  // namespace
 
 namespace {
@@ -88,7 +66,6 @@ bool WriteNormalizedLoca(int index_fmt, int num_glyphs, Font* font) {
         (glyph_size > 0 && !ReadGlyph(glyph_data, glyph_size, &glyph))) {
       return FONT_COMPRESSION_FAILURE();
     }
-    NormalizeSimpleGlyphBoundingBox(&glyph);
     size_t glyf_dst_size = glyf_table->buffer.size() - glyf_offset;
     if (!StoreGlyph(glyph, glyf_dst + glyf_offset, &glyf_dst_size)) {
       return FONT_COMPRESSION_FAILURE();
