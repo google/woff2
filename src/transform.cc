@@ -140,7 +140,6 @@ class GlyfEncoder {
     if (ShouldWriteSimpleGlyphBbox(glyph)) {
       WriteBbox(glyph_id, glyph);
     }
-    // TODO: check that bbox matches, write bbox if not
     for (int i = 0; i < num_contours; i++) {
       Write255UShort(&n_points_stream_, glyph.contours[i].size());
     }
