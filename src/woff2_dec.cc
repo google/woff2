@@ -411,6 +411,7 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
   std::vector<unsigned int> n_points_vec;
   std::vector<Point> points;
   uint32_t loca_offset = 0;
+  const uint8_t* bbox_bitmap = bbox_stream.buffer();
   for (unsigned int i = 0; i < num_glyphs; ++i) {
     size_t glyph_size = 0;
     uint16_t n_contours = 0;
@@ -423,6 +424,10 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
       // composite glyph
       bool have_instructions = false;
       unsigned int instruction_size = 0;
+      if (!(bbox_bitmap[i >> 3] & (0x80 >> (i & 7)))) {
+        // composite glyphs must have an explicit bbox
+        return FONT_COMPRESSION_FAILURE();
+      }
       if (!ProcessComposite(&composite_stream, glyf_dst, glyf_dst_size,
             &glyph_size, &have_instructions)) {
         return FONT_COMPRESSION_FAILURE();
