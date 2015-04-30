@@ -516,7 +516,7 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
     if (glyph_size + 3 < glyph_size) {
       return FONT_COMPRESSION_FAILURE();
     }
-    glyph_size = Round4(glyph_size);
+    glyph_size = Round2(glyph_size);
     if (glyph_size > dst_size - loca_offset) {
       // This shouldn't happen, but this test defensively maintains the
       // invariant that loca_offset <= dst_size.
