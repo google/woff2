@@ -48,7 +48,7 @@ namespace woff2 {
 #define FONT_COMPRESSION_FAILURE() false
 #else
 #define FONT_COMPRESSION_FAILURE() \
-  util::compression::font::Failure(__FILE__, __LINE__, __PRETTY_FUNCTION__)
+  woff2::Failure(__FILE__, __LINE__, __PRETTY_FUNCTION__)
 inline bool Failure(const char *f, int l, const char *fn) {
   fprintf(stderr, "ERROR at %s:%d (%s)\n", f, l, fn);
   fflush(stderr);
