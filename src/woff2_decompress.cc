@@ -24,14 +24,21 @@
 int main(int argc, char **argv) {
   using std::string;
 
-  if (argc != 2) {
-    fprintf(stderr, "One argument, the input filename, must be provided.\n");
+  if (argc < 2) {
+    fprintf(stderr, "At least one argument, the input filename, must be provided.\n");
+    return 1;
+  }
+
+  if (argc > 3) {
+    fprintf(stderr, "A maximum of two arguments, can be provided, the input filename and the output one.\n");
     return 1;
   }
 
   string filename(argv[1]);
-  string outfilename = filename.substr(0, filename.find_last_of(".")) + ".ttf";
-  fprintf(stdout, "Processing %s => %s\n",
+  string outfilename =  argc == 2 ?
+    filename.substr(0, filename.find_last_of(".")) + ".ttf" :
+    argv[2];
+  argc == 2 && fprintf(stdout, "Processing %s => %s\n",
     filename.c_str(), outfilename.c_str());
   string input = woff2::GetFileContent(filename);
 
