@@ -98,6 +98,10 @@ bool ReadBase128(Buffer* buf, uint32_t* value) {
     if (!buf->ReadU8(&code)) {
       return FONT_COMPRESSION_FAILURE();
     }
+    // Leading zeros are invalid.
+    if (i == 0 && code == 0x80) {
+      return FONT_COMPRESSION_FAILURE();
+    }
     // If any of the top seven bits are set then we're about to overflow.
     if (result & 0xfe000000) {
       return FONT_COMPRESSION_FAILURE();
