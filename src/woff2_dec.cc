@@ -701,9 +701,6 @@ bool ReadTableDirectory(Buffer* file, std::vector<Table>* tables,
       return FONT_COMPRESSION_FAILURE();
     }
     uint32_t flags = 0;
-    if (i > 0) {
-      flags |= kWoff2FlagsContinueStream;
-    }
     // Always transform the glyf and loca tables
     if (tag == kGlyfTableTag || tag == kLocaTableTag) {
       flags |= kWoff2FlagsTransform;
@@ -921,36 +918,22 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     return FONT_COMPRESSION_FAILURE();
   }
 
-  uint64_t src_offset = file.offset();
+  uint64_t compressed_offset = file.offset();
+  if (PREDICT_FALSE(compressed_offset > std::numeric_limits<uint32_t>::max())) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  uint64_t src_offset = Round4(compressed_offset + compressed_length);
   uint64_t dst_offset = first_table_offset;
 
 
-  uint64_t uncompressed_sum = 0;
   for (uint16_t i = 0; i < num_tables; ++i) {
     Table* table = &tables[i];
-    table->src_offset = src_offset;
-    table->src_length = (i == 0 ? compressed_length : 0);
-    src_offset += table->src_length;
-    if (PREDICT_FALSE(src_offset > std::numeric_limits<uint32_t>::max())) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    src_offset = Round4(src_offset);
     table->dst_offset = dst_offset;
     dst_offset += table->dst_length;
     if (PREDICT_FALSE(dst_offset > std::numeric_limits<uint32_t>::max())) {
       return FONT_COMPRESSION_FAILURE();
     }
     dst_offset = Round4(dst_offset);
-
-    uncompressed_sum += table->src_length;
-    if (PREDICT_FALSE(
-        uncompressed_sum > std::numeric_limits<uint32_t>::max())) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-  }
-  // Enforce same 30M limit on uncompressed tables as OTS
-  if (PREDICT_FALSE(uncompressed_sum > 30 * 1024 * 1024)) {
-    return FONT_COMPRESSION_FAILURE();
   }
   if (PREDICT_FALSE(src_offset > length || dst_offset != result_length)) {
     fprintf(stderr, "offset fail; src_offset %" PRIu64 " length %lu "
@@ -1044,38 +1027,26 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   }
 
   std::vector<uint8_t> uncompressed_buf;
-  bool continue_valid = false;
   const uint8_t* transform_buf = NULL;
+  uint64_t total_size = 0;
+  for (uint16_t i = 0; i < num_tables; ++i) {
+    total_size += tables[i].transform_length;
+    if (PREDICT_FALSE(total_size > std::numeric_limits<uint32_t>::max())) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+  }
+  uncompressed_buf.resize(total_size);
+  const uint8_t* src_buf = data + compressed_offset;
+  if (PREDICT_FALSE(!Woff2Uncompress(&uncompressed_buf[0], total_size,
+                       src_buf, compressed_length))) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  transform_buf = &uncompressed_buf[0];
+
   for (uint16_t i = 0; i < num_tables; ++i) {
     const Table* table = &tables[i];
     uint32_t flags = table->flags;
-    const uint8_t* src_buf = data + table->src_offset;
     size_t transform_length = table->transform_length;
-    if ((flags & kWoff2FlagsContinueStream) != 0) {
-      if (PREDICT_FALSE(!continue_valid)) {
-        return FONT_COMPRESSION_FAILURE();
-      }
-    } else if ((flags & kWoff2FlagsContinueStream) == 0) {
-      uint64_t total_size = transform_length;
-      for (uint16_t j = i + 1; j < num_tables; ++j) {
-        if ((tables[j].flags & kWoff2FlagsContinueStream) == 0) {
-          break;
-        }
-        total_size += tables[j].transform_length;
-        if (PREDICT_FALSE(total_size > std::numeric_limits<uint32_t>::max())) {
-          return FONT_COMPRESSION_FAILURE();
-        }
-      }
-      uncompressed_buf.resize(total_size);
-      if (PREDICT_FALSE(!Woff2Uncompress(&uncompressed_buf[0], total_size,
-                           src_buf, compressed_length))) {
-        return FONT_COMPRESSION_FAILURE();
-      }
-      transform_buf = &uncompressed_buf[0];
-      continue_valid = true;
-    } else {
-      return FONT_COMPRESSION_FAILURE();
-    }
 
     if ((flags & kWoff2FlagsTransform) == 0) {
       if (PREDICT_FALSE(transform_length != table->dst_length)) {
@@ -1107,12 +1078,10 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
         }
       }
     }
-    if (continue_valid) {
-      transform_buf += transform_length;
-      if (PREDICT_FALSE(
-          transform_buf > &uncompressed_buf[0] + uncompressed_buf.size())) {
-        return FONT_COMPRESSION_FAILURE();
-      }
+    transform_buf += transform_length;
+    if (PREDICT_FALSE(
+        transform_buf > &uncompressed_buf[0] + uncompressed_buf.size())) {
+      return FONT_COMPRESSION_FAILURE();
     }
   }
 

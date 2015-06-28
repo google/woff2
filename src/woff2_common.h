@@ -26,7 +26,6 @@ namespace woff2 {
 
 static const uint32_t kWoff2Signature = 0x774f4632;  // "wOF2"
 
-const unsigned int kWoff2FlagsContinueStream = 1 << 4;
 const unsigned int kWoff2FlagsTransform = 1 << 5;
 
 // TrueType Collection ID string: 'ttcf'
