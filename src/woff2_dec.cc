@@ -952,8 +952,8 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     return FONT_COMPRESSION_FAILURE();
   }
   if (src_offset > length || dst_offset != result_length) {
-    fprintf(stderr, "offset fail; src_offset %lu length %lu "
-      "dst_offset %lu result_length %lu\n",
+    fprintf(stderr, "offset fail; src_offset %" PRIu64 " length %lu "
+      "dst_offset %" PRIu64 " result_length %lu\n",
       src_offset, length, dst_offset, result_length);
     return FONT_COMPRESSION_FAILURE();
   }
