@@ -47,10 +47,11 @@ const size_t kWoff2EntrySize = 20;
 
 bool Compress(const uint8_t* data, const size_t len,
               uint8_t* result, uint32_t* result_len,
-              brotli::BrotliParams::Mode mode) {
+              brotli::BrotliParams::Mode mode, int quality) {
   size_t compressed_len = *result_len;
   brotli::BrotliParams params;
   params.mode = mode;
+  params.quality = quality;
   if (brotli::BrotliCompressBuffer(params, len, data, &compressed_len, result)
       == 0) {
     return false;
@@ -60,15 +61,15 @@ bool Compress(const uint8_t* data, const size_t len,
 }
 
 bool Woff2Compress(const uint8_t* data, const size_t len,
-                   uint8_t* result, uint32_t* result_len) {
+                   uint8_t* result, uint32_t* result_len, int quality) {
   return Compress(data, len, result, result_len,
-                  brotli::BrotliParams::MODE_FONT);
+                  brotli::BrotliParams::MODE_FONT, quality);
 }
 
 bool TextCompress(const uint8_t* data, const size_t len,
-                   uint8_t* result, uint32_t* result_len) {
+                   uint8_t* result, uint32_t* result_len, int quality) {
   return Compress(data, len, result, result_len,
-                  brotli::BrotliParams::MODE_TEXT);
+                  brotli::BrotliParams::MODE_TEXT, quality);
 }
 
 int KnownTableIndex(uint32_t tag) {
@@ -212,7 +213,13 @@ uint32_t CompressedBufferSize(uint32_t original_size) {
 
 bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                        uint8_t *result, size_t *result_length) {
-  return ConvertTTFToWOFF2(data, length, result, result_length, "");
+  return ConvertTTFToWOFF2(data, length, result, result_length, 11, "");
+}
+
+bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
+                       uint8_t *result, size_t *result_length,
+                       const string& extended_metadata) {
+  return ConvertTTFToWOFF2(data, length, result, result_length, 11, extended_metadata);
 }
 
 bool TransformFontCollection(FontCollection* font_collection) {
@@ -228,7 +235,7 @@ bool TransformFontCollection(FontCollection* font_collection) {
 
 bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                        uint8_t *result, size_t *result_length,
-                       const string& extended_metadata) {
+                       int quality, const string& extended_metadata) {
   FontCollection font_collection;
   if (!ReadFontCollection(data, length, &font_collection)) {
     fprintf(stderr, "Parsing of the input font failed.\n");
@@ -274,7 +281,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   // Compress all transformed data in one stream.
   if (!Woff2Compress(transform_buf.data(), total_transform_length,
                      &compression_buf[0],
-                     &total_compressed_length)) {
+                     &total_compressed_length, quality)) {
     fprintf(stderr, "Compression of combined table failed.\n");
     return false;
   }
@@ -289,7 +296,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     if (!TextCompress((const uint8_t*)extended_metadata.data(),
                       extended_metadata.length(),
                       compressed_metadata_buf.data(),
-                      &compressed_metadata_buf_length)) {
+                      &compressed_metadata_buf_length, quality)) {
       fprintf(stderr, "Compression of extended metadata failed.\n");
       return false;
     }
