@@ -20,10 +20,8 @@ The build process depends on the g++ compiler.
 On a standard Unix-style environment:
 
 ```
-git clone https://github.com/google/woff2.git
+git clone --recursive https://github.com/google/woff2.git
 cd woff2
-git submodule init
-git submodule update
 make clean all
 ```
 
