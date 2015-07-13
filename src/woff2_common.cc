@@ -24,9 +24,16 @@ namespace woff2 {
 uint32_t ComputeULongSum(const uint8_t* buf, size_t size) {
   uint32_t checksum = 0;
   for (size_t i = 0; i < size; i += 4) {
-    // We assume the addition is mod 2^32, which is valid because unsigned
+#if (defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__))
+    uint32_t v = *reinterpret_cast<const uint32_t*>(buf + i);
+    checksum += (((v & 0xFF) << 24) | ((v & 0xFF00) << 8) |
+      ((v & 0xFF0000) >> 8) | ((v & 0xFF000000) >> 24));
+#elif (defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__))
+    checksum += *reinterpret_cast<const uint32_t*>(buf + i);
+#else
     checksum += (buf[i] << 24) | (buf[i + 1] << 16) |
       (buf[i + 2] << 8) | buf[i + 3];
+#endif
   }
   return checksum;
 }

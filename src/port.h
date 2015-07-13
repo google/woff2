@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Helper function for bit twiddling
+// Helper function for bit twiddling and macros for branch prediction.
 
 #ifndef WOFF2_PORT_H_
 #define WOFF2_PORT_H_
@@ -43,4 +43,19 @@ inline int Log2Floor(uint32 n) {
 }
 
 } // namespace woff2
+
+/* Compatibility with non-clang compilers. */
+#ifndef __has_builtin
+#define __has_builtin(x) 0
+#endif
+
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ > 95) || \
+    (defined(__llvm__) && __has_builtin(__builtin_expect))
+#define PREDICT_FALSE(x) (__builtin_expect(x, 0))
+#define PREDICT_TRUE(x) (__builtin_expect(!!(x), 1))
+#else
+#define PREDICT_FALSE(x) (x)
+#define PREDICT_TRUE(x) (x)
+#endif
+
 #endif  // WOFF2_PORT_H_

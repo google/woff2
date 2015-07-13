@@ -47,10 +47,11 @@ const size_t kWoff2EntrySize = 20;
 
 bool Compress(const uint8_t* data, const size_t len,
               uint8_t* result, uint32_t* result_len,
-              brotli::BrotliParams::Mode mode) {
+              brotli::BrotliParams::Mode mode, int quality) {
   size_t compressed_len = *result_len;
   brotli::BrotliParams params;
   params.mode = mode;
+  params.quality = quality;
   if (brotli::BrotliCompressBuffer(params, len, data, &compressed_len, result)
       == 0) {
     return false;
@@ -60,15 +61,17 @@ bool Compress(const uint8_t* data, const size_t len,
 }
 
 bool Woff2Compress(const uint8_t* data, const size_t len,
-                   uint8_t* result, uint32_t* result_len) {
+                   uint8_t* result, uint32_t* result_len,
+                   int quality) {
   return Compress(data, len, result, result_len,
-                  brotli::BrotliParams::MODE_FONT);
+                  brotli::BrotliParams::MODE_FONT, quality);
 }
 
 bool TextCompress(const uint8_t* data, const size_t len,
-                   uint8_t* result, uint32_t* result_len) {
+                  uint8_t* result, uint32_t* result_len,
+                  int quality) {
   return Compress(data, len, result, result_len,
-                  brotli::BrotliParams::MODE_TEXT);
+                  brotli::BrotliParams::MODE_TEXT, quality);
 }
 
 int KnownTableIndex(uint32_t tag) {
@@ -210,11 +213,6 @@ uint32_t CompressedBufferSize(uint32_t original_size) {
   return 1.2 * original_size + 10240;
 }
 
-bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
-                       uint8_t *result, size_t *result_length) {
-  return ConvertTTFToWOFF2(data, length, result, result_length, "");
-}
-
 bool TransformFontCollection(FontCollection* font_collection) {
   for (auto& font : font_collection->fonts) {
     if (!TransformGlyfAndLocaTables(&font)) {
@@ -227,8 +225,15 @@ bool TransformFontCollection(FontCollection* font_collection) {
 }
 
 bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
+                       uint8_t *result, size_t *result_length) {
+  WOFF2Params params;
+  return ConvertTTFToWOFF2(data, length, result, result_length,
+                           params);
+}
+
+bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                        uint8_t *result, size_t *result_length,
-                       const string& extended_metadata) {
+                       const WOFF2Params& params) {
   FontCollection font_collection;
   if (!ReadFontCollection(data, length, &font_collection)) {
     fprintf(stderr, "Parsing of the input font failed.\n");
@@ -274,7 +279,8 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   // Compress all transformed data in one stream.
   if (!Woff2Compress(transform_buf.data(), total_transform_length,
                      &compression_buf[0],
-                     &total_compressed_length)) {
+                     &total_compressed_length,
+                     params.brotli_quality)) {
     fprintf(stderr, "Compression of combined table failed.\n");
     return false;
   }
@@ -282,14 +288,15 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   // Compress the extended metadata
   // TODO(user): how does this apply to collections
   uint32_t compressed_metadata_buf_length =
-    CompressedBufferSize(extended_metadata.length());
+    CompressedBufferSize(params.extended_metadata.length());
   std::vector<uint8_t> compressed_metadata_buf(compressed_metadata_buf_length);
 
-  if (extended_metadata.length() > 0) {
-    if (!TextCompress((const uint8_t*)extended_metadata.data(),
-                      extended_metadata.length(),
+  if (params.extended_metadata.length() > 0) {
+    if (!TextCompress((const uint8_t*)params.extended_metadata.data(),
+                      params.extended_metadata.length(),
                       compressed_metadata_buf.data(),
-                      &compressed_metadata_buf_length)) {
+                      &compressed_metadata_buf_length,
+                      params.brotli_quality)) {
       fprintf(stderr, "Compression of extended metadata failed.\n");
       return false;
     }
@@ -372,7 +379,8 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     StoreU32(woff2_length - compressed_metadata_buf_length,
              &offset, result);  // metaOffset
     StoreU32(compressed_metadata_buf_length, &offset, result);  // metaLength
-    StoreU32(extended_metadata.length(), &offset, result);  // metaOrigLength
+    StoreU32(params.extended_metadata.length(),
+             &offset, result);  // metaOrigLength
   } else {
     StoreU32(0, &offset, result);  // metaOffset
     StoreU32(0, &offset, result);  // metaLength

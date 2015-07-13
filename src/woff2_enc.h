@@ -26,6 +26,13 @@ using std::string;
 
 namespace woff2 {
 
+struct WOFF2Params {
+  WOFF2Params() : extended_metadata(""), brotli_quality(11) {}
+
+  string extended_metadata;
+  int brotli_quality;
+};
+
 // Returns an upper bound on the size of the compressed file.
 size_t MaxWOFF2CompressedSize(const uint8_t* data, size_t length);
 size_t MaxWOFF2CompressedSize(const uint8_t* data, size_t length,
@@ -36,10 +43,9 @@ size_t MaxWOFF2CompressedSize(const uint8_t* data, size_t length,
 // actual compressed size. Returns true on successful compression.
 bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                        uint8_t *result, size_t *result_length);
-
 bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                        uint8_t *result, size_t *result_length,
-                       const string& extended_metadata);
+                       const WOFF2Params& params);
 
 } // namespace woff2
 
