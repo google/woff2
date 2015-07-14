@@ -271,39 +271,6 @@ void ComputeBbox(unsigned int n_points, const Point* points, uint8_t* dst) {
   offset = Store16(dst, offset, y_max);
 }
 
-// Process entire bbox stream. This is done as a separate pass to allow for
-// composite bbox computations (an optional more aggressive transform).
-bool ProcessBboxStream(Buffer* bbox_stream, unsigned int n_glyphs,
-    const std::vector<uint32_t>& loca_values, uint8_t* glyf_buf,
-    size_t glyf_buf_length) {
-  const uint8_t* buf = bbox_stream->buffer();
-  if (PREDICT_FALSE(n_glyphs >= 65536 || loca_values.size() != n_glyphs + 1)) {
-    return FONT_COMPRESSION_FAILURE();
-  }
-  // Safe because n_glyphs is bounded
-  unsigned int bitmap_length = ((n_glyphs + 31) >> 5) << 2;
-  if (PREDICT_FALSE(!bbox_stream->Skip(bitmap_length))) {
-    return FONT_COMPRESSION_FAILURE();
-  }
-  for (unsigned int i = 0; i < n_glyphs; ++i) {
-    if (buf[i >> 3] & (0x80 >> (i & 7))) {
-      uint32_t loca_offset = loca_values[i];
-      if (PREDICT_FALSE(
-          loca_values[i + 1] - loca_offset < kEndPtsOfContoursOffset)) {
-        return FONT_COMPRESSION_FAILURE();
-      }
-      if (PREDICT_FALSE(glyf_buf_length < 2 + 10 ||
-          loca_offset > glyf_buf_length - 2 - 10)) {
-        return FONT_COMPRESSION_FAILURE();
-      }
-      if (PREDICT_FALSE(!bbox_stream->Read(glyf_buf + loca_offset + 2, 8))) {
-        return FONT_COMPRESSION_FAILURE();
-      }
-    }
-  }
-  return true;
-}
-
 bool ProcessComposite(Buffer* composite_stream, uint8_t* dst,
     size_t dst_size, size_t* glyph_size, bool* have_instructions) {
   size_t start_offset = composite_stream->offset();
@@ -416,9 +383,19 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
   std::unique_ptr<Point[]> points;
   size_t points_size = 0;
   uint32_t loca_offset = 0;
+  const uint8_t* bbox_bitmap = bbox_stream.buffer();
+  // Safe because num_glyphs is bounded
+  unsigned int bitmap_length = ((num_glyphs + 31) >> 5) << 2;
+  if (!bbox_stream.Skip(bitmap_length)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
   for (unsigned int i = 0; i < num_glyphs; ++i) {
     size_t glyph_size = 0;
     uint16_t n_contours = 0;
+    bool have_bbox = false;
+    if (bbox_bitmap[i >> 3] & (0x80 >> (i & 7))) {
+      have_bbox = true;
+    }
     if (PREDICT_FALSE(!n_contour_stream.ReadU16(&n_contours))) {
       return FONT_COMPRESSION_FAILURE();
     }
@@ -428,8 +405,15 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
       // composite glyph
       bool have_instructions = false;
       unsigned int instruction_size = 0;
+      if (PREDICT_FALSE(!have_bbox)) {
+        // composite glyphs must have an explicit bbox
+        return FONT_COMPRESSION_FAILURE();
+      }
       if (PREDICT_FALSE(!ProcessComposite(&composite_stream, glyf_dst,
             glyf_dst_size, &glyph_size, &have_instructions))) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+      if (PREDICT_FALSE(!bbox_stream.Read(glyf_dst + 2, 8))) {
         return FONT_COMPRESSION_FAILURE();
       }
       if (have_instructions) {
@@ -486,7 +470,13 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
         return FONT_COMPRESSION_FAILURE();
       }
       Store16(glyf_dst, 0, n_contours);
-      ComputeBbox(total_n_points, points.get(), glyf_dst);
+      if (have_bbox) {
+        if (PREDICT_FALSE(!bbox_stream.Read(glyf_dst + 2, 8))) {
+          return FONT_COMPRESSION_FAILURE();
+        }
+      } else {
+        ComputeBbox(total_n_points, points.get(), glyf_dst);
+      }
       size_t offset = kEndPtsOfContoursOffset;
       int end_point = -1;
       for (unsigned int contour_ix = 0; contour_ix < n_contours; ++contour_ix) {
@@ -536,10 +526,6 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
     loca_offset += glyph_size;
   }
   loca_values[num_glyphs] = loca_offset;
-  if (PREDICT_FALSE(!ProcessBboxStream(&bbox_stream, num_glyphs, loca_values,
-          dst, dst_size))) {
-    return FONT_COMPRESSION_FAILURE();
-  }
   return StoreLoca(loca_values, index_format, loca_buf, loca_size);
 }
 
