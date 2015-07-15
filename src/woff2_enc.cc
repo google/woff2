@@ -340,7 +340,6 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
       } else {
         table.dst_length = 0;
         table.dst_data = NULL;
-        table.flags |= kWoff2FlagsContinueStream;
       }
       tables.push_back(table);
     }
