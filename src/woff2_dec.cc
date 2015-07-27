@@ -943,6 +943,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   }
 
   // Re-order tables in output (OTSpec) order
+  std::vector<Table> sorted_tables(tables);
   if (header_version) {
     // collection; we have to sort the table offset vector in each font
     for (auto& ttc_font : ttc_fonts) {
@@ -957,7 +958,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     }
   } else {
     // non-collection; we can just sort the tables
-    std::sort(tables.begin(), tables.end());
+    std::sort(sorted_tables.begin(), sorted_tables.end());
   }
 
   if (meta_offset) {
@@ -1022,7 +1023,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
   } else {
     offset = StoreOffsetTable(result, offset, flavor, num_tables);
     for (uint16_t i = 0; i < num_tables; ++i) {
-      offset = StoreTableEntry(result, tables[i], offset);
+      offset = StoreTableEntry(result, sorted_tables[i], offset);
     }
   }
 
@@ -1091,7 +1092,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
       return FONT_COMPRESSION_FAILURE();
     }
   } else {
-    if (PREDICT_FALSE(!FixChecksums(tables, result))) {
+    if (PREDICT_FALSE(!FixChecksums(sorted_tables, result))) {
       return FONT_COMPRESSION_FAILURE();
     }
   }
