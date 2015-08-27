@@ -5,7 +5,7 @@ CPPFLAGS = -I./brotli/dec/ -I./brotli/enc/ -I./src
 CC ?= gcc
 CXX ?= g++
 
-COMMON_FLAGS = -fno-omit-frame-pointer -no-canonical-prefixes
+COMMON_FLAGS = -fno-omit-frame-pointer -no-canonical-prefixes -DFONT_COMPRESSION_BIN
 
 ifeq ($(OS), Darwin)
   CPPFLAGS += -DOS_MACOSX

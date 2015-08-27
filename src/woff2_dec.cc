@@ -901,7 +901,9 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
       }
 
       if (PREDICT_FALSE((glyf_table == NULL) != (loca_table == NULL))) {
+#ifdef FONT_COMPRESSION_BIN
         fprintf(stderr, "Cannot have just one of glyf/loca\n");
+#endif
         return FONT_COMPRESSION_FAILURE();
       }
 
@@ -936,9 +938,11 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     dst_offset = Round4(dst_offset);
   }
   if (PREDICT_FALSE(src_offset > length || dst_offset != result_length)) {
+#ifdef FONT_COMPRESSION_BIN
     fprintf(stderr, "offset fail; src_offset %" PRIu64 " length %lu "
       "dst_offset %" PRIu64 " result_length %lu\n",
       src_offset, length, dst_offset, result_length);
+#endif
     return FONT_COMPRESSION_FAILURE();
   }
 
