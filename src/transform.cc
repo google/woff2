@@ -239,18 +239,23 @@ bool TransformGlyfAndLocaTables(Font* font) {
   // no transform for CFF
   const Font::Table* glyf_table = font->FindTable(kGlyfTableTag);
   const Font::Table* loca_table = font->FindTable(kLocaTableTag);
-  if (font->FindTable(kCffTableTag) != NULL
-      && glyf_table == NULL
-      && loca_table == NULL) {
+
+  // If you don't have glyf/loca this transform isn't very interesting
+  if (loca_table == NULL && glyf_table == NULL) {
     return true;
   }
-  // Must share neither or both loca/glyf
-  if (glyf_table->IsReused() != loca_table->IsReused()) {
+  // It would be best if you didn't have just one of glyf/loca
+  if ((glyf_table == NULL) != (loca_table == NULL)) {
     return FONT_COMPRESSION_FAILURE();
   }
-  if (glyf_table->IsReused()) {
+  // Must share neither or both loca & glyf
+  if (loca_table->IsReused() != glyf_table->IsReused()) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (loca_table->IsReused()) {
     return true;
   }
+
   Font::Table* transformed_glyf = &font->tables[kGlyfTableTag ^ 0x80808080];
   Font::Table* transformed_loca = &font->tables[kLocaTableTag ^ 0x80808080];
 

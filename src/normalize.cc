@@ -115,21 +115,20 @@ bool MakeEditableBuffer(Font* font, int tableTag) {
 }  // namespace
 
 bool NormalizeGlyphs(Font* font) {
-  Font::Table* cff_table = font->FindTable(kCffTableTag);
   Font::Table* head_table = font->FindTable(kHeadTableTag);
   Font::Table* glyf_table = font->FindTable(kGlyfTableTag);
   Font::Table* loca_table = font->FindTable(kLocaTableTag);
   if (head_table == NULL) {
     return FONT_COMPRESSION_FAILURE();
   }
-  // CFF, no loca, no glyf is OK for CFF. If so, don't normalize.
-  if (cff_table != NULL && loca_table == NULL && glyf_table == NULL) {
+  // If you don't have glyf/loca this transform isn't very interesting
+  if (loca_table == NULL && glyf_table == NULL) {
     return true;
   }
-  if (loca_table == NULL || glyf_table == NULL) {
+  // It would be best if you didn't have just one of glyf/loca
+  if ((glyf_table == NULL) != (loca_table == NULL)) {
     return FONT_COMPRESSION_FAILURE();
   }
-
   // Must share neither or both loca & glyf
   if (loca_table->IsReused() != glyf_table->IsReused()) {
     return FONT_COMPRESSION_FAILURE();
