@@ -285,8 +285,10 @@ bool NormalizeFontCollection(FontCollection* font_collection) {
     font_collection->fonts.size());
   for (auto& font : font_collection->fonts) {
     if (!NormalizeWithoutFixingChecksums(&font)) {
+#ifdef FONT_COMPRESSION_BIN
       fprintf(stderr, "Font normalization failed.\n");
-      return false;
+#endif
+      return FONT_COMPRESSION_FAILURE();
     }
     offset += kSfntHeaderSize + kSfntEntrySize * font.num_tables;
   }
@@ -307,8 +309,10 @@ bool NormalizeFontCollection(FontCollection* font_collection) {
   // Now we can fix the checksums
   for (auto& font : font_collection->fonts) {
     if (!FixChecksums(&font)) {
+#ifdef FONT_COMPRESSION_BIN
       fprintf(stderr, "Failed to fix checksums\n");
-      return false;
+#endif
+      return FONT_COMPRESSION_FAILURE();
     }
   }
 

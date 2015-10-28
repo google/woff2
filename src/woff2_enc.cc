@@ -216,8 +216,10 @@ uint32_t CompressedBufferSize(uint32_t original_size) {
 bool TransformFontCollection(FontCollection* font_collection) {
   for (auto& font : font_collection->fonts) {
     if (!TransformGlyfAndLocaTables(&font)) {
+#ifdef FONT_COMPRESSION_BIN
       fprintf(stderr, "Font transformation failed.\n");
-      return false;
+#endif
+      return FONT_COMPRESSION_FAILURE();
     }
   }
 
@@ -236,16 +238,18 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                        const WOFF2Params& params) {
   FontCollection font_collection;
   if (!ReadFontCollection(data, length, &font_collection)) {
+#ifdef FONT_COMPRESSION_BIN
     fprintf(stderr, "Parsing of the input font failed.\n");
-    return false;
+#endif
+    return FONT_COMPRESSION_FAILURE();
   }
 
   if (!NormalizeFontCollection(&font_collection)) {
-    return false;
+    return FONT_COMPRESSION_FAILURE();
   }
 
   if (!TransformFontCollection(&font_collection)) {
-    return false;
+    return FONT_COMPRESSION_FAILURE();
   }
 
   // Although the compressed size of each table in the final woff2 file won't
@@ -281,8 +285,10 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                      &compression_buf[0],
                      &total_compressed_length,
                      params.brotli_quality)) {
+#ifdef FONT_COMPRESSION_BIN
     fprintf(stderr, "Compression of combined table failed.\n");
-    return false;
+#endif
+    return FONT_COMPRESSION_FAILURE();
   }
 
   // Compress the extended metadata
@@ -297,8 +303,10 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
                       compressed_metadata_buf.data(),
                       &compressed_metadata_buf_length,
                       params.brotli_quality)) {
+#ifdef FONT_COMPRESSION_BIN
       fprintf(stderr, "Compression of extended metadata failed.\n");
-      return false;
+#endif
+      return FONT_COMPRESSION_FAILURE();
     }
   } else {
     compressed_metadata_buf_length = 0;
@@ -348,9 +356,11 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   size_t woff2_length = ComputeWoff2Length(font_collection, tables,
       index_by_offset, compressed_metadata_buf_length);
   if (woff2_length > *result_length) {
+#ifdef FONT_COMPRESSION_BIN
     fprintf(stderr, "Result allocation was too small (%zd vs %zd bytes).\n",
            *result_length, woff2_length);
-    return false;
+#endif
+    return FONT_COMPRESSION_FAILURE();
   }
   *result_length = woff2_length;
 
@@ -419,9 +429,11 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
         uint32_t table_length =
           table.IsReused() ? table.reuse_of->length : table.length;
         if (index_by_offset.find(table_offset) == index_by_offset.end()) {
+#ifdef FONT_COMPRESSION_BIN
           fprintf(stderr, "Missing table index for offset 0x%08x\n",
                   table_offset);
-          return false;
+#endif
+          return FONT_COMPRESSION_FAILURE();
         }
         uint16_t index = index_by_offset[table_offset];
         Store255UShort(index, &offset, result);
@@ -440,9 +452,11 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
              &offset, result);
 
   if (*result_length != offset) {
+#ifdef FONT_COMPRESSION_BIN
     fprintf(stderr, "Mismatch between computed and actual length "
             "(%zd vs %zd)\n", *result_length, offset);
-    return false;
+#endif
+    return FONT_COMPRESSION_FAILURE();
   }
   return true;
 }
