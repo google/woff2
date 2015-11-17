@@ -124,7 +124,7 @@ size_t Base128Size(size_t n) {
 
 void StoreBase128(size_t len, size_t* offset, uint8_t* dst) {
   size_t size = Base128Size(len);
-  for (int i = 0; i < size; ++i) {
+  for (size_t i = 0; i < size; ++i) {
     int b = static_cast<int>((len >> (7 * (size - i - 1))) & 0x7f);
     if (i < size - 1) {
       b |= 0x80;

@@ -622,7 +622,7 @@ bool FixCollectionChecksums(size_t header_version,
 
     uint32_t file_checksum = 0;
     // compute each tables checksum
-    for (auto i = 0; i < table_indices.size(); i++) {
+    for (size_t i = 0; i < table_indices.size(); i++) {
       const Table& table = tables[table_indices[i]];
       uint32_t table_checksum = ComputeChecksum(&table, dst);
       size_t checksum_offset = offset + 4;  // skip past tag to checkSum
@@ -864,7 +864,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     }
     ttc_fonts.resize(num_fonts);
 
-    for (auto i = 0; i < num_fonts; i++) {
+    for (uint32_t i = 0; i < num_fonts; i++) {
       TtcFont& ttc_font = ttc_fonts[i];
       uint32_t num_tables;
       if (PREDICT_FALSE(!Read255UShort(&file, &num_tables) || !num_tables)) {
@@ -881,7 +881,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
       uint16_t glyf_idx;
       uint16_t loca_idx;
 
-      for (auto j = 0; j < num_tables; j++) {
+      for (uint32_t j = 0; j < num_tables; j++) {
         unsigned int table_idx;
         if (PREDICT_FALSE(!Read255UShort(&file, &table_idx))) {
           return FONT_COMPRESSION_FAILURE();
@@ -999,7 +999,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     offset = StoreU32(result, offset, ttc_fonts.size());  // ULONG numFonts
     // Space for ULONG OffsetTable[numFonts] (zeroed initially)
     offset_table = offset;  // keep start of offset table for later
-    for (int i = 0; i < ttc_fonts.size(); i++) {
+    for (size_t i = 0; i < ttc_fonts.size(); i++) {
       offset = StoreU32(result, offset, 0);  // will fill real values in later
     }
     // space for DSIG fields for header v2
