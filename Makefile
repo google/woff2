@@ -5,7 +5,7 @@ CPPFLAGS = -I./brotli/dec/ -I./brotli/enc/ -I./src
 CC ?= gcc
 CXX ?= g++
 
-COMMON_FLAGS = -fno-omit-frame-pointer -no-canonical-prefixes -DFONT_COMPRESSION_BIN
+COMMON_FLAGS = -fno-omit-frame-pointer -no-canonical-prefixes -DFONT_COMPRESSION_BIN -D __STDC_FORMAT_MACROS
 
 ifeq ($(OS), Darwin)
   CPPFLAGS += -DOS_MACOSX
@@ -29,6 +29,10 @@ OBJS = $(patsubst %, $(SRCDIR)/%, $(OUROBJ))
 EXECUTABLES=woff2_compress woff2_decompress
 
 EXE_OBJS=$(patsubst %, $(SRCDIR)/%.o, $(EXECUTABLES))
+
+ifeq (,$(wildcard $(BROTLI)/*))
+  $(error Brotli dependency not found : you must initialize the Git submodule)
+endif
 
 all : $(OBJS) $(EXECUTABLES)
 
