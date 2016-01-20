@@ -47,6 +47,8 @@ struct Font {
     // Intended use is to bypass re-processing tables
     Font::Table* reuse_of;
 
+    uint8_t flag_byte;
+
     // Is this table reused by a TTC
     bool IsReused() const;
   };

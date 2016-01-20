@@ -79,6 +79,7 @@ bool ReadTrueTypeFont(Buffer* file, const uint8_t* data, size_t len,
   std::map<uint32_t, uint32_t> intervals;
   for (uint16_t i = 0; i < font->num_tables; ++i) {
     Font::Table table;
+    table.flag_byte = 0;
     table.reuse_of = NULL;
     if (!file->ReadU32(&table.tag) ||
         !file->ReadU32(&table.checksum) ||

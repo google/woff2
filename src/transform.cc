@@ -290,4 +290,131 @@ bool TransformGlyfAndLocaTables(Font* font) {
   return true;
 }
 
+// See https://www.microsoft.com/typography/otspec/hmtx.htm
+// See WOFF2 spec, 5.4. Transformed hmtx table format
+bool TransformHmtxTable(Font* font) {
+  const Font::Table* glyf_table = font->FindTable(kGlyfTableTag);
+  const Font::Table* hmtx_table = font->FindTable(kHmtxTableTag);
+  const Font::Table* hhea_table = font->FindTable(kHheaTableTag);
+
+  // If you don't have hmtx or a glyf not much is going to happen here
+  if (hmtx_table == NULL || glyf_table == NULL) {
+    return true;
+  }
+
+  // hmtx without hhea doesn't make sense
+  if (hhea_table == NULL) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  // Skip 34 to reach 'hhea' numberOfHMetrics
+  Buffer hhea_buf(hhea_table->data, hhea_table->length);
+  uint16_t num_hmetrics;
+  if (!hhea_buf.Skip(34) || !hhea_buf.ReadU16(&num_hmetrics)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  // Must have at least one hMetric
+  if (num_hmetrics < 1) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  int num_glyphs = NumGlyphs(*font);
+
+  // Most fonts can be transformed; assume it's a go until proven otherwise
+  std::vector<uint16_t> advance_widths;
+  std::vector<int16_t> proportional_lsbs;
+  std::vector<int16_t> monospace_lsbs;
+
+  bool remove_proportional_lsb = true;
+  bool remove_monospace_lsb = (num_glyphs - num_hmetrics) > 0;
+
+  Buffer hmtx_buf(hmtx_table->data, hmtx_table->length);
+  for (int i = 0; i < num_glyphs; i++) {
+    Glyph glyph;
+    const uint8_t* glyph_data;
+    size_t glyph_size;
+    if (!GetGlyphData(*font, i, &glyph_data, &glyph_size) ||
+        (glyph_size > 0 && !ReadGlyph(glyph_data, glyph_size, &glyph))) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+
+    uint16_t advance_width = 0;
+    int16_t lsb = 0;
+
+    if (i < num_hmetrics) {
+      // [0, num_hmetrics) are proportional hMetrics
+      if (!hmtx_buf.ReadU16(&advance_width)) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+
+      if (!hmtx_buf.ReadS16(&lsb)) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+
+      if (glyph_size > 0 && glyph.x_min != lsb) {
+        remove_proportional_lsb = false;
+      }
+
+      advance_widths.push_back(advance_width);
+      proportional_lsbs.push_back(lsb);
+    } else {
+      // [num_hmetrics, num_glyphs) are monospace leftSideBearing's
+      if (!hmtx_buf.ReadS16(&lsb)) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+      if (glyph_size > 0 && glyph.x_min != lsb) {
+        remove_monospace_lsb = false;
+      }
+      monospace_lsbs.push_back(lsb);
+    }
+
+    // If we know we can't optimize, bail out completely
+    if (!remove_proportional_lsb && !remove_monospace_lsb) {
+      return true;
+    }
+  }
+
+  Font::Table* transformed_hmtx = &font->tables[kHmtxTableTag ^ 0x80808080];
+
+  uint8_t flags = 0;
+  size_t transformed_size = 1 + 2 * advance_widths.size();
+  if (remove_proportional_lsb) {
+    flags |= 1;
+  } else {
+    transformed_size += 2 * proportional_lsbs.size();
+  }
+  if (remove_monospace_lsb) {
+    flags |= 1 << 1;
+  } else {
+    transformed_size += 2 * monospace_lsbs.size();
+  }
+
+  transformed_hmtx->buffer.reserve(transformed_size);
+  std::vector<uint8_t>* out = &transformed_hmtx->buffer;
+  WriteBytes(out, &flags, 1);
+  for (uint16_t advance_width : advance_widths) {
+    WriteUShort(out, advance_width);
+  }
+
+  if (!remove_proportional_lsb) {
+    for (int16_t lsb : proportional_lsbs) {
+      WriteUShort(out, lsb);
+    }
+  }
+  if (!remove_monospace_lsb) {
+    for (int16_t lsb : monospace_lsbs) {
+      WriteUShort(out, lsb);
+    }
+  }
+
+  transformed_hmtx->tag = kHmtxTableTag ^ 0x80808080;
+  transformed_hmtx->flag_byte = 1 << 6;
+  transformed_hmtx->length = transformed_hmtx->buffer.size();
+  transformed_hmtx->data = transformed_hmtx->buffer.data();
+
+
+  return true;
+}
+
 } // namespace woff2

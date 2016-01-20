@@ -26,6 +26,9 @@ namespace woff2 {
 // derived from the original tag by flipping the MSBs of every byte.
 bool TransformGlyfAndLocaTables(Font* font);
 
+// Apply transformation to hmtx table if applicable for this font.
+bool TransformHmtxTable(Font* font);
+
 } // namespace woff2
 
 #endif  // WOFF2_TRANSFORM_H_
