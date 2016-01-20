@@ -78,17 +78,17 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
     return FONT_COMPRESSION_FAILURE();
   }
 
-  if (num_contours == 0) {
-    // Empty glyph.
-    return true;
-  }
-
   // Read the bounding box.
   if (!buffer.ReadS16(&glyph->x_min) ||
       !buffer.ReadS16(&glyph->y_min) ||
       !buffer.ReadS16(&glyph->x_max) ||
       !buffer.ReadS16(&glyph->y_max)) {
     return FONT_COMPRESSION_FAILURE();
+  }
+
+  if (num_contours == 0) {
+    // Empty glyph.
+    return true;
   }
 
   if (num_contours > 0) {

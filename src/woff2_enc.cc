@@ -34,9 +34,11 @@
 #include "./variable_length.h"
 #include "./woff2_common.h"
 
+
 namespace woff2 {
 
 namespace {
+
 
 using std::string;
 using std::vector;
@@ -82,7 +84,7 @@ int KnownTableIndex(uint32_t tag) {
 }
 
 void StoreTableEntry(const Table& table, size_t* offset, uint8_t* dst) {
-  uint8_t flag_byte = KnownTableIndex(table.tag);
+  uint8_t flag_byte = (table.flags & 0xC0) | KnownTableIndex(table.tag);
   dst[(*offset)++] = flag_byte;
   // The index here is treated as a set of flag bytes because
   // bits 6 and 7 of the byte are reserved for future use as flags.
@@ -109,6 +111,7 @@ size_t TableEntrySize(const Table& table) {
 size_t ComputeWoff2Length(const FontCollection& font_collection,
                           const std::vector<Table>& tables,
                           std::map<uint32_t, uint16_t> index_by_offset,
+                          size_t compressed_data_length,
                           size_t extended_metadata_length) {
   size_t size = kWoff2HeaderSize;
 
@@ -137,10 +140,8 @@ size_t ComputeWoff2Length(const FontCollection& font_collection,
   }
 
   // compressed data
-  for (const auto& table : tables) {
-    size += table.dst_length;
-    size = Round4(size);
-  }
+  size += compressed_data_length;
+  size = Round4(size);
 
   size += extended_metadata_length;
   return size;
@@ -217,7 +218,7 @@ bool TransformFontCollection(FontCollection* font_collection) {
   for (auto& font : font_collection->fonts) {
     if (!TransformGlyfAndLocaTables(&font)) {
 #ifdef FONT_COMPRESSION_BIN
-      fprintf(stderr, "Font transformation failed.\n");
+      fprintf(stderr, "glyf/loca transformation failed.\n");
 #endif
       return FONT_COMPRESSION_FAILURE();
     }
@@ -291,6 +292,11 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     return FONT_COMPRESSION_FAILURE();
   }
 
+#ifdef FONT_COMPRESSION_BIN
+  fprintf(stderr, "Compressed %zu to %u.\n", total_transform_length,
+          total_compressed_length);
+#endif
+
   // Compress the extended metadata
   // TODO(user): how does this apply to collections
   uint32_t compressed_metadata_buf_length =
@@ -331,30 +337,25 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
 
       Table table;
       table.tag = src_table.tag;
-      table.flags = 0;
+      table.flags = src_table.flag_byte;
       table.src_length = src_table.length;
       table.transform_length = src_table.length;
       const uint8_t* transformed_data = src_table.data;
       const Font::Table* transformed_table =
           font.FindTable(src_table.tag ^ 0x80808080);
       if (transformed_table != NULL) {
+        table.flags = transformed_table->flag_byte;
         table.flags |= kWoff2FlagsTransform;
         table.transform_length = transformed_table->length;
         transformed_data = transformed_table->data;
-      }
-      if (tables.empty()) {
-        table.dst_length = total_compressed_length;
-        table.dst_data = &compression_buf[0];
-      } else {
-        table.dst_length = 0;
-        table.dst_data = NULL;
+
       }
       tables.push_back(table);
     }
   }
 
   size_t woff2_length = ComputeWoff2Length(font_collection, tables,
-      index_by_offset, compressed_metadata_buf_length);
+      index_by_offset, total_compressed_length, compressed_metadata_buf_length);
   if (woff2_length > *result_length) {
 #ifdef FONT_COMPRESSION_BIN
     fprintf(stderr, "Result allocation was too small (%zd vs %zd bytes).\n",
@@ -444,10 +445,10 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   }
 
   // compressed data format (http://www.w3.org/TR/WOFF2/#table_format)
-  for (const auto& table : tables) {
-    StoreBytes(table.dst_data, table.dst_length, &offset, result);
-    offset = Round4(offset);
-  }
+
+  StoreBytes(&compression_buf[0], total_compressed_length, &offset, result);
+  offset = Round4(offset);
+
   StoreBytes(compressed_metadata_buf.data(), compressed_metadata_buf_length,
              &offset, result);
 

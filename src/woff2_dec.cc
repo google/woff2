@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_set>
 #include <memory>
 
 #include "./buffer.h"
@@ -401,6 +402,7 @@ bool ReconstructGlyf(const uint8_t* data, size_t data_size,
     }
     uint8_t* glyf_dst = dst + loca_offset;
     size_t glyf_dst_size = dst_size - loca_offset;
+
     if (n_contours == 0xffff) {
       // composite glyph
       bool have_instructions = false;
@@ -542,6 +544,200 @@ const Table* FindTable(const std::vector<Table>& tables, uint32_t tag) {
   return NULL;
 }
 
+// https://www.microsoft.com/typography/otspec/maxp.htm
+bool ReadNumGlyphs(const Table* maxp_table,
+                   uint8_t* dst, size_t dst_length, uint16_t* num_glyphs) {
+  if (PREDICT_FALSE(static_cast<uint64_t>(maxp_table->dst_offset +
+      maxp_table->dst_length) > dst_length)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  Buffer buffer(dst + maxp_table->dst_offset, maxp_table->dst_length);
+  // Skip 4 to reach 'maxp' numGlyphs
+  if (PREDICT_FALSE(!buffer.Skip(4) || !buffer.ReadU16(num_glyphs))) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  return true;
+}
+
+// Get numberOfHMetrics, https://www.microsoft.com/typography/otspec/hhea.htm
+bool ReadNumHMetrics(const Table* hhea_table,
+                     uint8_t* dst, size_t dst_length, uint16_t* num_hmetrics) {
+  if (PREDICT_FALSE(static_cast<uint64_t>(hhea_table->dst_offset +
+      hhea_table->dst_length) > dst_length)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  // Skip 34 to reach 'hhea' numberOfHMetrics
+  Buffer buffer(dst + hhea_table->dst_offset, hhea_table->dst_length);
+  if (PREDICT_FALSE(!buffer.Skip(34) || !buffer.ReadU16(num_hmetrics))) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  return true;
+}
+
+// x_min for glyph; https://www.microsoft.com/typography/otspec/glyf.htm
+bool ReadGlyphXMin(Buffer* glyf_buff, Buffer* loca_buff, int16_t loca_format,
+                   uint16_t index, int16_t* x_min) {
+  uint32_t offset1, offset2;
+  loca_buff->set_offset((loca_format == 0 ? 2 : 4) * index);
+  if (loca_format == 0) {
+    uint16_t tmp1, tmp2;
+    if (PREDICT_FALSE(!loca_buff->ReadU16(&tmp1) ||
+                      !loca_buff->ReadU16(&tmp2))) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+    // https://www.microsoft.com/typography/otspec/loca.htm
+    // "The actual local offset divided by 2 is stored."
+    offset1 = tmp1 * 2;
+    offset2 = tmp2 * 2;
+  } else if (PREDICT_FALSE(!loca_buff->ReadU32(&offset1) ||
+                           !loca_buff->ReadU32(&offset2))) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  if (offset1 != offset2) {
+    glyf_buff->set_offset(offset1 + 2);
+    if (!glyf_buff->ReadS16(x_min)) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+  } else {
+    *x_min = 0;
+  }
+  return true;
+}
+
+// http://dev.w3.org/webfonts/WOFF2/spec/Overview.html#hmtx_table_format
+bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
+                                size_t transformed_size,
+                                const Table* glyf_table,
+                                const Table* hhea_table,
+                                const Table* hmtx_table,
+                                const Table* loca_table,
+                                const Table* maxp_table,
+                                uint8_t* dst, size_t dst_length) {
+  if (PREDICT_FALSE(!glyf_table)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (PREDICT_FALSE(!hhea_table)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (PREDICT_FALSE(!hmtx_table)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (PREDICT_FALSE(!loca_table)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (PREDICT_FALSE(!maxp_table)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  uint16_t num_glyphs, num_hmetrics;
+  if (!ReadNumGlyphs(maxp_table, dst, dst_length, &num_glyphs)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (!ReadNumHMetrics(hhea_table, dst, dst_length, &num_hmetrics)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  if (PREDICT_FALSE(static_cast<uint64_t>(hmtx_table->dst_offset +
+      hmtx_table->dst_length) > dst_length)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  Buffer hmtx_buff_in(transformed_buf, transformed_size);
+
+  uint8_t hmtx_flags;
+  if (PREDICT_FALSE(!hmtx_buff_in.ReadU8(&hmtx_flags))) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  std::vector<uint16_t> advance_widths;
+  std::vector<int16_t> lsbs;
+  bool has_proportional_lsbs = (hmtx_flags & 1) == 0;
+  bool has_monospace_lsbs = (hmtx_flags & 2) == 0;
+
+  // you say you transformed but there is little evidence of it
+  if (has_proportional_lsbs && has_monospace_lsbs) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  // glyf/loca are done already so we can use them to recover x_min's
+  if (PREDICT_FALSE(static_cast<uint64_t>(glyf_table->dst_offset +
+      glyf_table->dst_length) > dst_length)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (PREDICT_FALSE(static_cast<uint64_t>(loca_table->dst_offset +
+      loca_table->dst_length) > dst_length)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  Buffer glyf_buff(dst + glyf_table->dst_offset, glyf_table->dst_length);
+  Buffer loca_buff(dst + loca_table->dst_offset, loca_table->dst_length);
+  int16_t loca_format;
+  if (loca_table->dst_length == 2 * (num_glyphs + 1)) {
+    loca_format = 0;
+  } else if (loca_table->dst_length == 4 * (num_glyphs + 1)) {
+    loca_format = 1;
+  } else {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  for (uint16_t i = 0; i < num_hmetrics; i++) {
+    uint16_t advance_width;
+    if (PREDICT_FALSE(!hmtx_buff_in.ReadU16(&advance_width))) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+    advance_widths.push_back(advance_width);
+  }
+
+  for (uint16_t i = 0; i < num_hmetrics; i++) {
+    int16_t lsb;
+    if (has_proportional_lsbs) {
+      if (PREDICT_FALSE(!hmtx_buff_in.ReadS16(&lsb))) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+    } else {
+      if (PREDICT_FALSE(!ReadGlyphXMin(&glyf_buff, &loca_buff, loca_format, i,
+          &lsb))) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+    }
+    lsbs.push_back(lsb);
+  }
+
+  for (uint16_t i = num_hmetrics; i < num_glyphs; i++) {
+    int16_t lsb;
+    if (has_monospace_lsbs) {
+      if (PREDICT_FALSE(!hmtx_buff_in.ReadS16(&lsb))) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+    } else {
+      if (PREDICT_FALSE(!ReadGlyphXMin(&glyf_buff, &loca_buff, loca_format, i,
+          &lsb))) {
+        return FONT_COMPRESSION_FAILURE();
+      }
+    }
+    lsbs.push_back(lsb);
+  }
+
+  // bake me a shiny new hmtx table
+  uint32_t hmtx_output_size = 2 * num_glyphs + 2 * num_hmetrics;
+  if (hmtx_output_size > hmtx_table->dst_length) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+  if (PREDICT_FALSE(static_cast<uint64_t>(hmtx_table->dst_offset +
+      hmtx_table->dst_length) > dst_length)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  size_t dst_offset = hmtx_table->dst_offset;
+  for (uint32_t i = 0; i < num_glyphs; i++) {
+    if (i < num_hmetrics) {
+      Store16(advance_widths[i], &dst_offset, dst);
+    }
+    Store16(lsbs[i], &dst_offset, dst);
+  }
+
+  return true;
+}
+
 bool ReconstructTransformedGlyf(const uint8_t* transformed_buf,
     size_t transformed_size, const Table* glyf_table, const Table* loca_table,
     uint8_t* dst, size_t dst_length) {
@@ -561,9 +757,11 @@ bool ReconstructTransformedGlyf(const uint8_t* transformed_buf,
                          dst + loca_table->dst_offset, loca_table->dst_length);
 }
 
+// Reconstructs a single font. tables must not contain duplicates.
 bool ReconstructTransformed(const std::vector<Table>& tables, uint32_t tag,
     const uint8_t* transformed_buf, size_t transformed_size,
     uint8_t* dst, size_t dst_length) {
+
   if (tag == kGlyfTableTag) {
     const Table* glyf_table = FindTable(tables, tag);
     const Table* loca_table = FindTable(tables, kLocaTableTag);
@@ -572,6 +770,20 @@ bool ReconstructTransformed(const std::vector<Table>& tables, uint32_t tag,
   } else if (tag == kLocaTableTag) {
     // processing was already done by glyf table, but validate
     if (PREDICT_FALSE(!FindTable(tables, kGlyfTableTag))) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+  } else if (tag == kHmtxTableTag) {
+    // Tables are sorted for a non-collection.
+    // glyf is before hmtx and includes loca so all our accesses are safe.
+    const Table* glyf_table = FindTable(tables, kGlyfTableTag);
+    const Table* hhea_table = FindTable(tables, kHheaTableTag);
+    const Table* hmtx_table = FindTable(tables, kHmtxTableTag);
+    const Table* loca_table = FindTable(tables, kLocaTableTag);
+    const Table* maxp_table = FindTable(tables, kMaxpTableTag);
+
+    if (PREDICT_FALSE(!ReconstructTransformedHmtx(
+        transformed_buf, transformed_size, glyf_table, hhea_table,
+        hmtx_table, loca_table, maxp_table, dst, dst_length))) {
       return FONT_COMPRESSION_FAILURE();
     }
   } else {
@@ -696,15 +908,19 @@ bool ReadTableDirectory(Buffer* file, std::vector<Table>* tables,
     } else {
       tag = kKnownTags[flag_byte & 0x3f];
     }
-    // Bits 6 and 7 are reserved and must be 0.
-    if (PREDICT_FALSE((flag_byte & 0xC0)) != 0) {
-      return FONT_COMPRESSION_FAILURE();
-    }
     uint32_t flags = 0;
-    // Always transform the glyf and loca tables
+    uint8_t xform_version = (flag_byte >> 6) & 0x03;
+
+    // 0 means xform for glyph/loca, non-0 for others
     if (tag == kGlyfTableTag || tag == kLocaTableTag) {
+      if (xform_version == 0) {
+        flags |= kWoff2FlagsTransform;
+      }
+    } else if (xform_version != 0) {
       flags |= kWoff2FlagsTransform;
     }
+    flags |= xform_version;
+
     uint32_t dst_length;
     if (PREDICT_FALSE(!ReadBase128(file, &dst_length))) {
       return FONT_COMPRESSION_FAILURE();
@@ -779,6 +995,29 @@ uint64_t ComputeOffsetToFirstTable(const uint32_t header_version,
     }
   }
   return offset;
+}
+
+bool ReconstructTransformedFont(const std::vector<Table>& tables,
+                                std::map<uint32_t, const uint8_t*>* src_by_dest,
+                                uint8_t* result, size_t result_length) {
+  for (const auto& table : tables) {
+    if ((table.flags & kWoff2FlagsTransform) != kWoff2FlagsTransform) {
+      continue;
+    }
+    const auto it = src_by_dest->find(table.dst_offset);
+    if (it == src_by_dest->end()) {
+      continue;
+    }
+    const uint8_t* transform_buf = (*it).second;
+    src_by_dest->erase(table.dst_offset);
+
+    size_t transform_length = table.transform_length;
+    if (PREDICT_FALSE(!ReconstructTransformed(tables, table.tag,
+            transform_buf, transform_length, result, result_length))) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+  }
+  return true;
 }
 
 bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
@@ -1046,14 +1285,31 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
                        src_buf, compressed_length))) {
     return FONT_COMPRESSION_FAILURE();
   }
+
+  // round 1, copy across all the unmodified tables
   transform_buf = &uncompressed_buf[0];
+  const uint8_t* const transform_buf_end = &uncompressed_buf[0]
+                                           + uncompressed_buf.size();
+
+  // We wipe out the values as they get written into the final result to dedup
+  std::map<uint32_t, const uint8_t*> src_by_dest;
+  for (uint16_t i = 0; i < num_tables; ++i) {
+    const Table* table = &tables[i];
+    size_t transform_length = table->transform_length;
+
+    src_by_dest[table->dst_offset] = transform_buf;
+
+    if (PREDICT_FALSE(transform_buf + transform_length > transform_buf_end)) {
+      return FONT_COMPRESSION_FAILURE();
+    }
+    transform_buf += transform_length;
+  }
 
   for (uint16_t i = 0; i < num_tables; ++i) {
     const Table* table = &tables[i];
-    uint32_t flags = table->flags;
-    size_t transform_length = table->transform_length;
+    const size_t transform_length = table->transform_length;
 
-    if ((flags & kWoff2FlagsTransform) == 0) {
+    if ((table->flags & kWoff2FlagsTransform) != kWoff2FlagsTransform) {
       if (PREDICT_FALSE(transform_length != table->dst_length)) {
         return FONT_COMPRESSION_FAILURE();
       }
@@ -1061,31 +1317,29 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
           transform_length) > result_length)) {
         return FONT_COMPRESSION_FAILURE();
       }
+      transform_buf = src_by_dest.at(table->dst_offset);
+      src_by_dest.erase(table->dst_offset);
+      std::memcpy(result + table->dst_offset, transform_buf, transform_length);
+    }
+  }
 
-      std::memcpy(result + table->dst_offset, transform_buf,
-          transform_length);
-    } else {
-      if (header_version) {
-        if (table->tag == kGlyfTableTag) {
-          const Table* loca_table = loca_by_glyf[table];
-          if (PREDICT_FALSE(!ReconstructTransformedGlyf(transform_buf,
-              transform_length, table, loca_table, result, result_length))) {
-            return FONT_COMPRESSION_FAILURE();
-          }
-        } else if (PREDICT_FALSE(table->tag != kLocaTableTag)) {
-          // transform for this tag not known
-          return FONT_COMPRESSION_FAILURE();
-        }
-      } else {
-        if (PREDICT_FALSE(!ReconstructTransformed(tables, table->tag,
-                transform_buf, transform_length, result, result_length))) {
-          return FONT_COMPRESSION_FAILURE();
-        }
+  // round 2, reconstruct transformed tables
+  if (PREDICT_FALSE(header_version)) {
+    // Rebuild collection font by font.
+    std::vector<Table> font_tables;
+    for (const auto& ttc_font : ttc_fonts) {
+      font_tables.resize(ttc_font.table_indices.size());
+      for (auto i = 0; i < ttc_font.table_indices.size(); i++) {
+        font_tables[i] = tables[ttc_font.table_indices[i]];
+      }
+      if (PREDICT_FALSE(!ReconstructTransformedFont(font_tables, &src_by_dest,
+                                                    result, result_length))) {
+        return FONT_COMPRESSION_FAILURE();
       }
     }
-    transform_buf += transform_length;
-    if (PREDICT_FALSE(
-        transform_buf > &uncompressed_buf[0] + uncompressed_buf.size())) {
+  } else {
+    if (PREDICT_FALSE(!ReconstructTransformedFont(tables, &src_by_dest, result,
+                                                  result_length))) {
       return FONT_COMPRESSION_FAILURE();
     }
   }

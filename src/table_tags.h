@@ -27,6 +27,9 @@ static const uint32_t kHeadTableTag = 0x68656164;
 static const uint32_t kLocaTableTag = 0x6c6f6361;
 static const uint32_t kDsigTableTag = 0x44534947;
 static const uint32_t kCffTableTag = 0x43464620;
+static const uint32_t kHmtxTableTag = 0x686d7478;
+static const uint32_t kHheaTableTag = 0x68686561;
+static const uint32_t kMaxpTableTag = 0x6d617870;
 
 extern const uint32_t kKnownTags[];
 
