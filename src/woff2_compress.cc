@@ -39,8 +39,9 @@ int main(int argc, char **argv) {
   string output(output_size, 0);
   uint8_t* output_data = reinterpret_cast<uint8_t*>(&output[0]);
 
+  woff2::WOFF2Params params;
   if (!woff2::ConvertTTFToWOFF2(input_data, input.size(),
-                                output_data, &output_size)) {
+                                output_data, &output_size, params)) {
     fprintf(stderr, "Compression failed.\n");
     return 1;
   }

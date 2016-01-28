@@ -249,8 +249,20 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
     return FONT_COMPRESSION_FAILURE();
   }
 
-  if (!TransformFontCollection(&font_collection)) {
+  if (params.allow_transforms && !TransformFontCollection(&font_collection)) {
     return FONT_COMPRESSION_FAILURE();
+  } else {
+    // glyf/loca use 11 to flag "not transformed"
+    for (auto& font : font_collection.fonts) {
+      Font::Table* glyf_table = font.FindTable(kGlyfTableTag);
+      Font::Table* loca_table = font.FindTable(kLocaTableTag);
+      if (glyf_table) {
+        glyf_table->flag_byte |= 0xc0;
+      }
+      if (loca_table) {
+        loca_table->flag_byte |= 0xc0;
+      }
+    }
   }
 
   // Although the compressed size of each table in the final woff2 file won't

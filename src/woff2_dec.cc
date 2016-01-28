@@ -24,7 +24,6 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <unordered_set>
 #include <memory>
 
 #include "./buffer.h"
@@ -1317,7 +1316,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
           transform_length) > result_length)) {
         return FONT_COMPRESSION_FAILURE();
       }
-      transform_buf = src_by_dest.at(table->dst_offset);
+      transform_buf = src_by_dest[table->dst_offset];
       src_by_dest.erase(table->dst_offset);
       std::memcpy(result + table->dst_offset, transform_buf, transform_length);
     }
