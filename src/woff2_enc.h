@@ -27,10 +27,12 @@ using std::string;
 namespace woff2 {
 
 struct WOFF2Params {
-  WOFF2Params() : extended_metadata(""), brotli_quality(11) {}
+  WOFF2Params() : extended_metadata(""), brotli_quality(11),
+                  allow_transforms(true) {}
 
   string extended_metadata;
   int brotli_quality;
+  bool allow_transforms;
 };
 
 // Returns an upper bound on the size of the compressed file.
