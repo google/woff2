@@ -26,8 +26,8 @@
 #include <map>
 #include <memory>
 
-#include "./buffer.h"
 #include "./decode.h"
+#include "./buffer.h"
 #include "./port.h"
 #include "./round.h"
 #include "./store_bytes.h"
@@ -1121,7 +1121,8 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
 
       for (uint32_t j = 0; j < num_tables; j++) {
         unsigned int table_idx;
-        if (PREDICT_FALSE(!Read255UShort(&file, &table_idx))) {
+        if (PREDICT_FALSE(!Read255UShort(&file, &table_idx)) ||
+            table_idx >= tables.size()) {
           return FONT_COMPRESSION_FAILURE();
         }
         ttc_font.table_indices[j] = table_idx;
