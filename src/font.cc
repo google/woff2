@@ -145,7 +145,7 @@ bool ReadTrueTypeCollection(Buffer* file, const uint8_t* data, size_t len,
     }
 
     std::vector<uint32_t> offsets;
-    for (auto i = 0; i < num_fonts; i++) {
+    for (uint32_t i = 0; i < num_fonts; i++) {
       uint32_t offset;
       if (!file->ReadU32(&offset)) {
         return FONT_COMPRESSION_FAILURE();
@@ -301,7 +301,7 @@ bool WriteFontCollection(const FontCollection& font_collection, uint8_t* dst,
 
   // Offset Table, zeroed for now
   size_t offset_table = offset;  // where to write offsets later
-  for (int i = 0; i < font_collection.fonts.size(); i++) {
+  for (size_t i = 0; i < font_collection.fonts.size(); i++) {
     StoreU32(0, &offset, dst);
   }
 
@@ -312,8 +312,7 @@ bool WriteFontCollection(const FontCollection& font_collection, uint8_t* dst,
   }
 
   // Write fonts and their offsets.
-  for (int i = 0; i < font_collection.fonts.size(); i++) {
-    const auto& font = font_collection.fonts[i];
+  for (const auto& font : font_collection.fonts) {
     StoreU32(offset, &offset_table, dst);
     if (!WriteFont(font, &offset, dst, dst_size)) {
       return false;
