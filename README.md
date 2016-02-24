@@ -2,7 +2,7 @@
 compression related modules in this repository.
 
 brotli/ contains reference code for the Brotli byte-level compression
-algorithm. Note that it is licensed under an Apache 2 license.
+algorithm. Note that it is licensed under the MIT license.
 
 src/ contains the C++ code for compressing and decompressing fonts.
 
