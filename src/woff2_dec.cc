@@ -670,9 +670,10 @@ bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
   Buffer glyf_buff(dst + glyf_table->dst_offset, glyf_table->dst_length);
   Buffer loca_buff(dst + loca_table->dst_offset, loca_table->dst_length);
   int16_t loca_format;
-  if (loca_table->dst_length == 2 * (num_glyphs + 1)) {
+  if (loca_table->dst_length == static_cast<uint32_t>(2 * (num_glyphs + 1))) {
     loca_format = 0;
-  } else if (loca_table->dst_length == 4 * (num_glyphs + 1)) {
+  } else if (loca_table->dst_length ==
+      static_cast<uint32_t>(4 * (num_glyphs + 1))) {
     loca_format = 1;
   } else {
     return FONT_COMPRESSION_FAILURE();
@@ -1329,7 +1330,7 @@ bool ConvertWOFF2ToTTF(uint8_t* result, size_t result_length,
     std::vector<Table> font_tables;
     for (const auto& ttc_font : ttc_fonts) {
       font_tables.resize(ttc_font.table_indices.size());
-      for (auto i = 0; i < ttc_font.table_indices.size(); i++) {
+      for (size_t i = 0; i < ttc_font.table_indices.size(); i++) {
         font_tables[i] = tables[ttc_font.table_indices[i]];
       }
       if (PREDICT_FALSE(!ReconstructTransformedFont(font_tables, &src_by_dest,
