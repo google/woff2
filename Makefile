@@ -19,7 +19,8 @@ CXXFLAGS += $(COMMON_FLAGS) -std=c++11
 SRCDIR = src
 
 OUROBJ = font.o glyph.o normalize.o table_tags.o transform.o \
-         woff2_dec.o woff2_enc.o woff2_common.o variable_length.o
+         woff2_dec.o woff2_enc.o woff2_common.o woff2_out.o \
+         variable_length.o
 
 BROTLI = brotli
 ENCOBJ = $(BROTLI)/enc/*.o
