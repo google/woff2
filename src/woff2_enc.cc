@@ -23,8 +23,8 @@
 #include <string>
 #include <vector>
 
-#include "./buffer.h"
 #include "./encode.h"
+#include "./buffer.h"
 #include "./font.h"
 #include "./normalize.h"
 #include "./round.h"
@@ -46,6 +46,7 @@ using std::vector;
 
 const size_t kWoff2HeaderSize = 48;
 const size_t kWoff2EntrySize = 20;
+
 
 bool Compress(const uint8_t* data, const size_t len,
               uint8_t* result, uint32_t* result_len,
