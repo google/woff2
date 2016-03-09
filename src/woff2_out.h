@@ -36,6 +36,7 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <string>
 #include "./port.h"
 
 namespace woff2 {
