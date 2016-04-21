@@ -635,35 +635,6 @@ Table* FindTable(std::vector<Table*>* tables, uint32_t tag) {
   return NULL;
 }
 
-// This is linear search, but could be changed to binary because we
-// do have a guarantee that the tables are sorted by tag. But the total
-// cpu time is expected to be very small in any case.
-const Table* FindTable(const std::vector<Table>& tables, uint32_t tag) {
-  size_t n_tables = tables.size();
-  for (size_t i = 0; i < n_tables; ++i) {
-    if (tables[i].tag == tag) {
-      return &tables[i];
-    }
-  }
-  return NULL;
-}
-
-// https://www.microsoft.com/typography/otspec/maxp.htm
-bool ReadNumGlyphs(const Table* maxp_table,
-                   const uint8_t* dst, size_t dst_length,
-                   uint16_t* num_glyphs) {
-  if (PREDICT_FALSE(static_cast<uint64_t>(maxp_table->dst_offset +
-      maxp_table->dst_length) > dst_length)) {
-    return FONT_COMPRESSION_FAILURE();
-  }
-  Buffer buffer(dst + maxp_table->dst_offset, maxp_table->dst_length);
-  // Skip 4 to reach 'maxp' numGlyphs
-  if (PREDICT_FALSE(!buffer.Skip(4) || !buffer.ReadU16(num_glyphs))) {
-    return FONT_COMPRESSION_FAILURE();
-  }
-  return true;
-}
-
 // Get numberOfHMetrics, https://www.microsoft.com/typography/otspec/hhea.htm
 bool ReadNumHMetrics(const uint8_t* data, size_t data_size,
                      uint16_t* num_hmetrics) {
@@ -671,37 +642,6 @@ bool ReadNumHMetrics(const uint8_t* data, size_t data_size,
   Buffer buffer(data, data_size);
   if (PREDICT_FALSE(!buffer.Skip(34) || !buffer.ReadU16(num_hmetrics))) {
     return FONT_COMPRESSION_FAILURE();
-  }
-  return true;
-}
-
-// x_min for glyph; https://www.microsoft.com/typography/otspec/glyf.htm
-bool ReadGlyphXMin(Buffer* glyf_buff, Buffer* loca_buff, int16_t loca_format,
-                   uint16_t index, int16_t* x_min) {
-  uint32_t offset1, offset2;
-  loca_buff->set_offset((loca_format == 0 ? 2 : 4) * index);
-  if (loca_format == 0) {
-    uint16_t tmp1, tmp2;
-    if (PREDICT_FALSE(!loca_buff->ReadU16(&tmp1) ||
-                      !loca_buff->ReadU16(&tmp2))) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-    // https://www.microsoft.com/typography/otspec/loca.htm
-    // "The actual local offset divided by 2 is stored."
-    offset1 = tmp1 * 2;
-    offset2 = tmp2 * 2;
-  } else if (PREDICT_FALSE(!loca_buff->ReadU32(&offset1) ||
-                           !loca_buff->ReadU32(&offset2))) {
-    return FONT_COMPRESSION_FAILURE();
-  }
-
-  if (offset1 != offset2) {
-    glyf_buff->set_offset(offset1 + 2);
-    if (!glyf_buff->ReadS16(x_min)) {
-      return FONT_COMPRESSION_FAILURE();
-    }
-  } else {
-    *x_min = 0;
   }
   return true;
 }
@@ -783,18 +723,6 @@ bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
   }
 
   return true;
-}
-
-uint32_t ComputeChecksum(const Table* table, const uint8_t* dst) {
-  return ComputeULongSum(dst + table->dst_offset, table->dst_length);
-}
-
-const Table* FindTable(TtcFont ttc_font, const std::vector<Table>& tables,
-  uint32_t tag) {
-  for (const auto i : ttc_font.table_indices) {
-    if (tables[i].tag == tag) return &tables[i];
-  }
-  return NULL;
 }
 
 bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,

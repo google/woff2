@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "./encode.h"
+#include "./compressor.h"
 #include "./buffer.h"
 #include "./font.h"
 #include "./normalize.h"
@@ -145,14 +145,6 @@ size_t ComputeWoff2Length(const FontCollection& font_collection,
   size = Round4(size);
 
   size += extended_metadata_length;
-  return size;
-}
-
-size_t ComputeTTFLength(const std::vector<Table>& tables) {
-  size_t size = 12 + 16 * tables.size();  // sfnt header
-  for (const auto& table : tables) {
-    size += Round4(table.src_length);
-  }
   return size;
 }
 
