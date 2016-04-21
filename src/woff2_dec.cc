@@ -603,13 +603,12 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
     *glyf_checksum += ComputeULongSum(glyph_buf.get(), glyph_size);
 
     // We may need x_min to reconstruct 'hmtx'
-    Buffer x_min_buf(glyph_buf.get() + 2, 2);
-    int16_t x_min;
-    if (PREDICT_FALSE(!x_min_buf.ReadS16(&x_min))) {
-      return FONT_COMPRESSION_FAILURE();
+    if (n_contours > 0) {
+      Buffer x_min_buf(glyph_buf.get() + 2, 2);
+      if (PREDICT_FALSE(!x_min_buf.ReadS16(&info->x_mins[i]))) {
+        return FONT_COMPRESSION_FAILURE();
+      }
     }
-
-    info->x_mins[i] = n_contours != 0 ? x_min : 0;
   }
 
   // glyf_table dst_offset was set by ReconstructFont
