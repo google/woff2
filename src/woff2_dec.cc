@@ -70,6 +70,10 @@ const size_t kCompositeGlyphBegin = 10;
 // Largest glyph ever observed was 72k bytes
 const size_t kDefaultGlyphBuf = 5120;
 
+// Over 14k test fonts the max compression ratio seen to date was ~20.
+// >100 suggests you wrote a bad uncompressed size.
+const float kMaxPlausibleCompressionRatio = 100.0;
+
 // metadata for a TTC font entry
 struct TtcFont {
   uint32_t flavor;
@@ -478,7 +482,7 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
         }
       }
 
-      size_t size_needed = 2 + composite_size + instruction_size;
+      size_t size_needed = 12 + composite_size + instruction_size;
       if (PREDICT_FALSE(glyph_buf_size < size_needed)) {
         glyph_buf.reset(new uint8_t[size_needed]);
         glyph_buf_size = size_needed;
@@ -671,6 +675,11 @@ bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
   }
 
   assert(x_mins.size() == num_glyphs);
+
+  // num_glyphs 0 is OK if there is no 'glyf' but cannot then xform 'hmtx'.
+  if (PREDICT_FALSE(num_hmetrics > num_glyphs)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
 
   for (uint16_t i = 0; i < num_hmetrics; i++) {
     uint16_t advance_width;
@@ -1267,6 +1276,14 @@ bool ConvertWOFF2ToTTF(const uint8_t* data, size_t length,
   }
 
   if (!WriteHeaders(data, length, &metadata, &hdr, out)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
+  const float compression_ratio = (float) hdr.uncompressed_size / length;
+  if (compression_ratio > kMaxPlausibleCompressionRatio) {
+#ifdef FONT_COMPRESSION_BIN
+    fprintf(stderr, "Implausible compression ratio %.01f\n", compression_ratio);
+#endif
     return FONT_COMPRESSION_FAILURE();
   }
 
