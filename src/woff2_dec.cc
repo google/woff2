@@ -681,6 +681,12 @@ bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
     return FONT_COMPRESSION_FAILURE();
   }
 
+  // https://www.microsoft.com/typography/otspec/hmtx.htm
+  // "...only one entry need be in the array, but that entry is required."
+  if (PREDICT_FALSE(num_hmetrics < 1)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
   for (uint16_t i = 0; i < num_hmetrics; i++) {
     uint16_t advance_width;
     if (PREDICT_FALSE(!hmtx_buff_in.ReadU16(&advance_width))) {
