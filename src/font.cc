@@ -181,15 +181,14 @@ bool ReadFontCollection(const uint8_t* data, size_t len,
                         FontCollection* font_collection) {
   Buffer file(data, len);
 
-  uint32_t flavor;
-  if (!file.ReadU32(&flavor)) {
+  if (!file.ReadU32(&font_collection->flavor)) {
     return FONT_COMPRESSION_FAILURE();
   }
 
-  if (flavor != kTtcFontFlavor) {
+  if (font_collection->flavor != kTtcFontFlavor) {
     font_collection->fonts.resize(1);
     Font& font = font_collection->fonts[0];
-    font.flavor = flavor;
+    font.flavor = font_collection->flavor;
     return ReadTrueTypeFont(&file, data, len, &font);
   }
   return ReadTrueTypeCollection(&file, data, len, font_collection);
@@ -286,7 +285,7 @@ bool WriteFontCollection(const FontCollection& font_collection, uint8_t* dst,
   size_t offset = 0;
 
   // It's simpler if this just a simple sfnt
-  if (font_collection.fonts.size() == 1) {
+  if (font_collection.flavor != kTtcFontFlavor) {
     return WriteFont(font_collection.fonts[0], &offset, dst, dst_size);
   }
 

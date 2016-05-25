@@ -121,7 +121,7 @@ size_t ComputeWoff2Length(const FontCollection& font_collection,
   }
 
   // for collections only, collection tables
-  if (font_collection.fonts.size() > 1) {
+  if (font_collection.flavor == kTtcFontFlavor) {
     size += 4;  // UInt32 Version of TTC Header
     size += Size255UShort(font_collection.fonts.size());  // 255UInt16 numFonts
 
@@ -161,7 +161,7 @@ size_t ComputeUncompressedLength(const Font& font) {
 }
 
 size_t ComputeUncompressedLength(const FontCollection& font_collection) {
-  if (font_collection.fonts.size() == 1) {
+  if (font_collection.flavor != kTtcFontFlavor) {
     return ComputeUncompressedLength(font_collection.fonts[0]);
   }
   size_t size = CollectionHeaderSize(font_collection.header_version,
@@ -372,13 +372,12 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   }
   *result_length = woff2_length;
 
-  const Font& first_font = font_collection.fonts[0];
   size_t offset = 0;
 
   // start of woff2 header (http://www.w3.org/TR/WOFF2/#woff20Header)
   StoreU32(kWoff2Signature, &offset, result);
-  if (font_collection.fonts.size() == 1) {
-    StoreU32(first_font.flavor, &offset, result);
+  if (font_collection.flavor != kTtcFontFlavor) {
+    StoreU32(font_collection.fonts[0].flavor, &offset, result);
   } else {
     StoreU32(kTtcFontFlavor, &offset, result);
   }
@@ -389,9 +388,9 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   StoreU32(ComputeUncompressedLength(font_collection), &offset, result);
   StoreU32(total_compressed_length, &offset, result);  // totalCompressedSize
 
-  // TODO(user): is always taking this from the first tables head OK?
-  // font revision
-  StoreBytes(first_font.FindTable(kHeadTableTag)->data + 4, 4, &offset, result);
+  // Let's just all be v1.0
+  Store16(1, &offset, result);  // majorVersion
+  Store16(0, &offset, result);  // minorVersion
   if (compressed_metadata_buf_length > 0) {
     StoreU32(woff2_length - compressed_metadata_buf_length,
              &offset, result);  // metaOffset
@@ -413,7 +412,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   }
 
   // for collections only, collection table directory
-  if (font_collection.fonts.size() > 1) {
+  if (font_collection.flavor == kTtcFontFlavor) {
     StoreU32(font_collection.header_version, &offset, result);
     Store255UShort(font_collection.fonts.size(), &offset, result);
     for (const Font& font : font_collection.fonts) {
