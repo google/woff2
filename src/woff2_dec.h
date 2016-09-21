@@ -35,7 +35,7 @@ bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
 
 // Decompresses the font into out. Returns true on success.
 // Works even if WOFF2Header totalSfntSize is wrong.
-// Please prefer API.
+// Please prefer this API.
 bool ConvertWOFF2ToTTF(const uint8_t *data, size_t length,
                        WOFF2Out* out);
 
