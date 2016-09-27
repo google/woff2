@@ -41,10 +41,10 @@ $(EXECUTABLES) : $(EXE_OBJS) deps
 	$(CXX) $(LFLAGS) $(OBJS) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
 
 deps :
-	$(MAKE) -C $(BROTLI)/dec
-	$(MAKE) -C $(BROTLI)/enc
+	"$(MAKE)" -C $(BROTLI)/dec
+	"$(MAKE)" -C $(BROTLI)/enc
 
 clean :
 	rm -f $(OBJS) $(EXE_OBJS) $(EXECUTABLES)
-	$(MAKE) -C $(BROTLI)/dec clean
-	$(MAKE) -C $(BROTLI)/enc clean
+	"$(MAKE)" -C $(BROTLI)/dec clean
+	"$(MAKE)" -C $(BROTLI)/enc clean
