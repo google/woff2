@@ -19,7 +19,7 @@
 
 #include <stddef.h>
 #include <inttypes.h>
-#include "./woff2_out.h"
+#include <woff2/output.h>
 
 namespace woff2 {
 

@@ -14,7 +14,7 @@
 //
 // Output buffer for WOFF2 decompression.
 
-#include "./woff2_out.h"
+#include <woff2/output.h>
 
 namespace woff2 {
 

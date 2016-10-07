@@ -20,7 +20,7 @@
 #include <stddef.h>
 
 #include "./buffer.h"
-#include "./port.h"
+#include <woff2/port.h>
 #include "./font.h"
 #include "./glyph.h"
 #include "./round.h"

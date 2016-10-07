@@ -18,7 +18,7 @@
 #include <string>
 
 #include "./file.h"
-#include "./woff2_dec.h"
+#include <woff2/decode.h>
 
 
 int main(int argc, char **argv) {
