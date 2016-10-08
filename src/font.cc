@@ -19,7 +19,7 @@
 #include <algorithm>
 
 #include "./buffer.h"
-#include <woff2/port.h>
+#include "./port.h"
 #include "./store_bytes.h"
 #include "./table_tags.h"
 #include "./woff2_common.h"
