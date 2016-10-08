@@ -1,3 +1,4 @@
 [submodule "brotli"]
 	path = brotli
 	url = https://github.com/google/brotli.git
+	ignore = dirty

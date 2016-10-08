@@ -26,8 +26,8 @@
 #include <map>
 #include <memory>
 #include <utility>
+#include <brotli/decode.h>
 
-#include "./decode.h"
 #include "./buffer.h"
 #include "./port.h"
 #include "./round.h"
@@ -739,12 +739,29 @@ bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
   return true;
 }
 
-bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,
+bool Woff2Uncompress(std::vector<uint8_t>& dst,
   const uint8_t* src_buf, size_t src_size) {
-  size_t uncompressed_size = dst_size;
-  int ok = BrotliDecompressBuffer(src_size, src_buf,
-                                  &uncompressed_size, dst_buf);
-  if (PREDICT_FALSE(!ok || uncompressed_size != dst_size)) {
+  const size_t kBufferSize = 0x10000;
+  uint8_t* buffer = new uint8_t[kBufferSize];
+  BrotliDecoderState* state = BrotliDecoderCreateInstance(0, 0, 0);
+
+  BrotliDecoderResult result = BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT;
+  while (result == BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT) {
+    size_t dst_available = kBufferSize;
+    uint8_t* dst_next = buffer;
+    result = BrotliDecoderDecompressStream(state, &src_size, &src_buf,
+                                           &dst_available, &dst_next, 0);
+    size_t dst_used = kBufferSize - dst_available;
+    if (dst_used != 0)
+      dst.insert(dst.end(), buffer, buffer + dst_used);
+  }
+
+  BrotliDecoderDestroyInstance(state);
+  delete[] buffer;
+
+  bool ok = result == BROTLI_DECODER_RESULT_SUCCESS;
+
+  if (PREDICT_FALSE(!ok)) {
     return FONT_COMPRESSION_FAILURE();
   }
   return true;
@@ -1297,9 +1314,10 @@ bool ConvertWOFF2ToTTF(const uint8_t* data, size_t length,
   }
 
   const uint8_t* src_buf = data + hdr.compressed_offset;
-  std::vector<uint8_t> uncompressed_buf(hdr.uncompressed_size);
-  if (PREDICT_FALSE(!Woff2Uncompress(&uncompressed_buf[0],
-                                     hdr.uncompressed_size, src_buf,
+  std::vector<uint8_t> uncompressed_buf;
+  uncompressed_buf.reserve(hdr.uncompressed_size);
+  if (PREDICT_FALSE(!Woff2Uncompress(uncompressed_buf,
+                                     src_buf,
                                      hdr.compressed_length))) {
     return FONT_COMPRESSION_FAILURE();
   }

@@ -1,6 +1,8 @@
 OS := $(shell uname)
 
-CPPFLAGS = -I./brotli/dec/ -I./brotli/enc/ -I./src
+BROTLI = brotli
+
+CPPFLAGS = -I$(BROTLI)/include -I./src
 
 CC ?= gcc
 CXX ?= g++
@@ -22,10 +24,6 @@ OUROBJ = font.o glyph.o normalize.o table_tags.o transform.o \
          woff2_dec.o woff2_enc.o woff2_common.o woff2_out.o \
          variable_length.o
 
-BROTLI = brotli
-ENCOBJ = $(BROTLI)/enc/*.o
-DECOBJ = $(BROTLI)/dec/*.o
-
 OBJS = $(patsubst %, $(SRCDIR)/%, $(OUROBJ))
 EXECUTABLES=woff2_compress woff2_decompress
 
@@ -38,13 +36,11 @@ endif
 all : $(OBJS) $(EXECUTABLES)
 
 $(EXECUTABLES) : $(EXE_OBJS) deps
-	$(CXX) $(LFLAGS) $(OBJS) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
+	$(CXX) $(LFLAGS) $(OBJS) $(SRCDIR)/$@.o -L$(BROTLI) -lbrotli -o $@
 
 deps :
-	$(MAKE) -C $(BROTLI)/dec
-	$(MAKE) -C $(BROTLI)/enc
+	$(MAKE) -C $(BROTLI) lib
 
 clean :
 	rm -f $(OBJS) $(EXE_OBJS) $(EXECUTABLES)
-	$(MAKE) -C $(BROTLI)/dec clean
-	$(MAKE) -C $(BROTLI)/enc clean
+	$(MAKE) -C $(BROTLI) clean
