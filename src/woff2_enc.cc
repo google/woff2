@@ -22,8 +22,8 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <brotli/encode.h>
 
-#include "./compressor.h"
 #include "./buffer.h"
 #include "./font.h"
 #include "./normalize.h"
@@ -50,16 +50,30 @@ const size_t kWoff2EntrySize = 20;
 
 bool Compress(const uint8_t* data, const size_t len,
               uint8_t* result, uint32_t* result_len,
-              brotli::BrotliParams::Mode mode, int quality) {
-  size_t compressed_len = *result_len;
-  brotli::BrotliParams params;
-  params.mode = mode;
-  params.quality = quality;
-  if (brotli::BrotliCompressBuffer(params, len, data, &compressed_len, result)
-      == 0) {
+              BrotliEncoderMode mode, int quality) {
+  bool ok = false;
+  size_t output_len, result_available;
+  output_len = result_available = *result_len;
+
+  BrotliEncoderState* enc = BrotliEncoderCreateInstance(0, 0, 0);
+  if (enc) {
+    uint8_t *result_out = result;
+    size_t data_available = len;
+    const uint8_t *data_next = data;
+
+    BrotliEncoderSetParameter(enc, BROTLI_PARAM_MODE, (uint32_t)mode);
+    BrotliEncoderSetParameter(enc, BROTLI_PARAM_QUALITY, (uint32_t)quality);
+    BrotliEncoderCompressStream(enc, BROTLI_OPERATION_FINISH,
+                                &data_available, &data_next,
+                                &result_available, &result_out, 0);
+    ok = BrotliEncoderIsFinished(enc);
+  }
+  BrotliEncoderDestroyInstance(enc);
+
+  if (!ok) {
     return false;
   }
-  *result_len = compressed_len;
+  *result_len = output_len - result_available;
   return true;
 }
 
@@ -67,14 +81,14 @@ bool Woff2Compress(const uint8_t* data, const size_t len,
                    uint8_t* result, uint32_t* result_len,
                    int quality) {
   return Compress(data, len, result, result_len,
-                  brotli::BrotliParams::MODE_FONT, quality);
+                  BROTLI_MODE_FONT, quality);
 }
 
 bool TextCompress(const uint8_t* data, const size_t len,
                   uint8_t* result, uint32_t* result_len,
                   int quality) {
   return Compress(data, len, result, result_len,
-                  brotli::BrotliParams::MODE_TEXT, quality);
+                  BROTLI_MODE_TEXT, quality);
 }
 
 int KnownTableIndex(uint32_t tag) {
