@@ -1,6 +1,8 @@
 OS := $(shell uname)
 
-CPPFLAGS = -I./brotli/dec/ -I./brotli/enc/ -I./src
+BROTLI_ROOT = ./brotli
+
+CPPFLAGS = -I$(BROTLI_ROOT)/dec -I$(BROTLI_ROOT)/enc -I./src
 
 CC ?= gcc
 CXX ?= g++
@@ -22,29 +24,36 @@ OUROBJ = font.o glyph.o normalize.o table_tags.o transform.o \
          woff2_dec.o woff2_enc.o woff2_common.o woff2_out.o \
          variable_length.o
 
-BROTLI = brotli
-ENCOBJ = $(BROTLI)/enc/*.o
-DECOBJ = $(BROTLI)/dec/*.o
+BROTLI_OBJ_DIR = $(BROTLI_ROOT)/bin/obj
+BROTLI_OBJS = $(BROTLI_OBJ_DIR)/common/*.o $(BROTLI_OBJ_DIR)/enc/*.o $(BROTLI_OBJ_DIR)/dec/*.o
 
 OBJS = $(patsubst %, $(SRCDIR)/%, $(OUROBJ))
-EXECUTABLES=woff2_compress woff2_decompress
+EXECUTABLES = woff2_compress woff2_decompress
 
-EXE_OBJS=$(patsubst %, $(SRCDIR)/%.o, $(EXECUTABLES))
+EXE_OBJS = $(patsubst %, $(SRCDIR)/%.o, $(EXECUTABLES))
 
-ifeq (,$(wildcard $(BROTLI)/*))
+TEST_FILES = $(wildcard ./test/*.sh)
+
+ifeq (,$(wildcard $(BROTLI_ROOT)/*))
   $(error Brotli dependency not found : you must initialize the Git submodule)
 endif
 
-all : $(OBJS) $(EXECUTABLES)
+all : $(OBJS) $(EXECUTABLES) test
 
 $(EXECUTABLES) : $(EXE_OBJS) deps
-	$(CXX) $(LFLAGS) $(OBJS) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
+	$(CXX) $(LFLAGS) $(OBJS) $(BROTLI_OBJS) $(SRCDIR)/$@.o -o $@
 
 deps :
-	$(MAKE) -C $(BROTLI)/dec
-	$(MAKE) -C $(BROTLI)/enc
+	$(MAKE) -C $(BROTLI_ROOT)
 
-clean :
+test_clean :
+	rm -rf test/tmp
+
+test : $(TEST_FILES) $(EXECUTABLES) test_clean
+	for test in $(TEST_FILES); do \
+		$$test; \
+	done
+
+clean : test_clean
 	rm -f $(OBJS) $(EXE_OBJS) $(EXECUTABLES)
-	$(MAKE) -C $(BROTLI)/dec clean
-	$(MAKE) -C $(BROTLI)/enc clean
+	$(MAKE) -C $(BROTLI_ROOT) clean
