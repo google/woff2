@@ -1129,19 +1129,17 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
     }
   }
 
-  const uint64_t first_table_offset = ComputeOffsetToFirstTable(*hdr);
-
   hdr->compressed_offset = file.offset();
   if (PREDICT_FALSE(hdr->compressed_offset >
                     std::numeric_limits<uint32_t>::max())) {
     return FONT_COMPRESSION_FAILURE();
   }
   uint64_t src_offset = Round4(hdr->compressed_offset + hdr->compressed_length);
-  uint64_t dst_offset = first_table_offset;
 
 
   if (PREDICT_FALSE(src_offset > length)) {
 #ifdef FONT_COMPRESSION_BIN
+    uint64_t dst_offset = ComputeOffsetToFirstTable(*hdr);
     fprintf(stderr, "offset fail; src_offset %" PRIu64 " length %lu "
       "dst_offset %" PRIu64 "\n",
       src_offset, length, dst_offset);
