@@ -27,7 +27,7 @@
 #include <memory>
 #include <utility>
 
-#include "./decode.h"
+#include "./brotli/decode.h"
 #include "./buffer.h"
 #include "./port.h"
 #include "./round.h"
@@ -742,9 +742,10 @@ bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
 bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,
   const uint8_t* src_buf, size_t src_size) {
   size_t uncompressed_size = dst_size;
-  int ok = BrotliDecompressBuffer(src_size, src_buf,
-                                  &uncompressed_size, dst_buf);
-  if (PREDICT_FALSE(!ok || uncompressed_size != dst_size)) {
+  BrotliDecoderResult result = BrotliDecoderDecompress(
+      src_size, src_buf, &uncompressed_size, dst_buf);
+  if (PREDICT_FALSE(result != BROTLI_DECODER_RESULT_SUCCESS ||
+                    uncompressed_size != dst_size)) {
     return FONT_COMPRESSION_FAILURE();
   }
   return true;
