@@ -2,10 +2,13 @@ OS := $(shell uname)
 
 CPPFLAGS = -I./brotli/include/ -I./src
 
+AR ?= ar
 CC ?= gcc
 CXX ?= g++
 
-COMMON_FLAGS = -fno-omit-frame-pointer -no-canonical-prefixes -DFONT_COMPRESSION_BIN -D __STDC_FORMAT_MACROS
+# It's helpful to be able to turn this off for fuzzing
+CANONICAL_PREFIXES ?= -no-canonical-prefixes
+COMMON_FLAGS = -fno-omit-frame-pointer $(CANONICAL_PREFIXES) -DFONT_COMPRESSION_BIN -D __STDC_FORMAT_MACROS
 
 ifeq ($(OS), Darwin)
   CPPFLAGS += -DOS_MACOSX
@@ -13,6 +16,7 @@ else
   COMMON_FLAGS += -fno-tree-vrp
 endif
 
+ARFLAGS = crf
 CFLAGS += $(COMMON_FLAGS)
 CXXFLAGS += $(COMMON_FLAGS) -std=c++11
 
@@ -30,14 +34,18 @@ COMMONOBJ = $(BROTLIOBJ)/common/*.o
 
 OBJS = $(patsubst %, $(SRCDIR)/%, $(OUROBJ))
 EXECUTABLES=woff2_compress woff2_decompress
-
 EXE_OBJS=$(patsubst %, $(SRCDIR)/%.o, $(EXECUTABLES))
+ARCHIVES=convert_woff2ttf_fuzzer convert_woff2ttf_fuzzer_new_entry
+ARCHIVE_OBJS=$(patsubst %, $(SRCDIR)/%.o, $(ARCHIVES))
 
 ifeq (,$(wildcard $(BROTLI)/*))
   $(error Brotli dependency not found : you must initialize the Git submodule)
 endif
 
-all : $(OBJS) $(EXECUTABLES)
+all : $(OBJS) $(EXECUTABLES) $(ARCHIVES)
+
+$(ARCHIVES) : $(ARCHIVE_OBJS) $(OBJS) deps
+	$(AR) $(ARFLAGS) $(SRCDIR)/$@.a $(OBJS) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o
 
 $(EXECUTABLES) : $(EXE_OBJS) deps
 	$(CXX) $(LFLAGS) $(OBJS) $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@

@@ -105,6 +105,12 @@ bool ReadTrueTypeFont(Buffer* file, const uint8_t* data, size_t len,
     last_offset = i.first + i.second;
   }
 
+  // Sanity check key tables
+  const Font::Table* head_table = font->FindTable(kHeadTableTag);
+  if (head_table != NULL && head_table->length < 52) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
   return true;
 }
 
