@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "./compressor.h"
+#include "./brotli/encode.h"
 #include "./buffer.h"
 #include "./font.h"
 #include "./normalize.h"
@@ -47,16 +47,11 @@ using std::vector;
 const size_t kWoff2HeaderSize = 48;
 const size_t kWoff2EntrySize = 20;
 
-
-bool Compress(const uint8_t* data, const size_t len,
-              uint8_t* result, uint32_t* result_len,
-              brotli::BrotliParams::Mode mode, int quality) {
+bool Compress(const uint8_t* data, const size_t len, uint8_t* result,
+              uint32_t* result_len, BrotliEncoderMode mode, int quality) {
   size_t compressed_len = *result_len;
-  brotli::BrotliParams params;
-  params.mode = mode;
-  params.quality = quality;
-  if (brotli::BrotliCompressBuffer(params, len, data, &compressed_len, result)
-      == 0) {
+  if (BrotliEncoderCompress(quality, BROTLI_DEFAULT_WINDOW, mode, len, data,
+                            &compressed_len, result) == 0) {
     return false;
   }
   *result_len = compressed_len;
@@ -67,14 +62,14 @@ bool Woff2Compress(const uint8_t* data, const size_t len,
                    uint8_t* result, uint32_t* result_len,
                    int quality) {
   return Compress(data, len, result, result_len,
-                  brotli::BrotliParams::MODE_FONT, quality);
+                  BROTLI_MODE_FONT, quality);
 }
 
 bool TextCompress(const uint8_t* data, const size_t len,
                   uint8_t* result, uint32_t* result_len,
                   int quality) {
   return Compress(data, len, result, result_len,
-                  brotli::BrotliParams::MODE_TEXT, quality);
+                  BROTLI_MODE_TEXT, quality);
 }
 
 int KnownTableIndex(uint32_t tag) {
