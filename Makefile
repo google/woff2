@@ -45,7 +45,8 @@ endif
 all : $(OBJS) $(EXECUTABLES) $(ARCHIVES)
 
 $(ARCHIVES) : $(ARCHIVE_OBJS) $(OBJS) deps
-	$(AR) $(ARFLAGS) $(SRCDIR)/$@.a $(OBJS) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o
+	$(AR) $(ARFLAGS) $(SRCDIR)/$@.a $(OBJS) \
+	      $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o
 
 $(EXECUTABLES) : $(EXE_OBJS) deps
 	$(CXX) $(LFLAGS) $(OBJS) $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
