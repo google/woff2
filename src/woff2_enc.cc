@@ -428,8 +428,6 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
         // for reused tables, only the original has an updated offset
         uint32_t table_offset =
           table.IsReused() ? table.reuse_of->offset : table.offset;
-        uint32_t table_length =
-          table.IsReused() ? table.reuse_of->length : table.length;
         if (index_by_offset.find(table_offset) == index_by_offset.end()) {
 #ifdef FONT_COMPRESSION_BIN
           fprintf(stderr, "Missing table index for offset 0x%08x\n",
