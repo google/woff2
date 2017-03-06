@@ -6,9 +6,10 @@ AR ?= ar
 CC ?= gcc
 CXX ?= g++
 
-# It's helpful to be able to turn this off for fuzzing
+# It's helpful to be able to turn these off for fuzzing
 CANONICAL_PREFIXES ?= -no-canonical-prefixes
-COMMON_FLAGS = -fno-omit-frame-pointer $(CANONICAL_PREFIXES) -DFONT_COMPRESSION_BIN -D __STDC_FORMAT_MACROS
+NOISY_LOGGING ?= -DFONT_COMPRESSION_BIN
+COMMON_FLAGS = -fno-omit-frame-pointer $(CANONICAL_PREFIXES) $(NOISY_LOGGING) -D __STDC_FORMAT_MACROS
 
 ifeq ($(OS), Darwin)
   CPPFLAGS += -DOS_MACOSX
