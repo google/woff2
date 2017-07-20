@@ -331,8 +331,11 @@ int NumGlyphs(const Font& font) {
     return 0;
   }
   int index_fmt = IndexFormat(font);
-  int num_glyphs = (loca_table->length / (index_fmt == 0 ? 2 : 4)) - 1;
-  return num_glyphs;
+  int loca_record_size = (index_fmt == 0 ? 2 : 4);
+  if (loca_table->length < loca_record_size) {
+    return 0;
+  }
+  return (loca_table->length / loca_record_size) - 1;
 }
 
 int IndexFormat(const Font& font) {
