@@ -1299,6 +1299,9 @@ bool ConvertWOFF2ToTTF(const uint8_t* data, size_t length,
 
   const uint8_t* src_buf = data + hdr.compressed_offset;
   std::vector<uint8_t> uncompressed_buf(hdr.uncompressed_size);
+  if (PREDICT_FALSE(hdr.uncompressed_size < 1)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
   if (PREDICT_FALSE(!Woff2Uncompress(&uncompressed_buf[0],
                                      hdr.uncompressed_size, src_buf,
                                      hdr.compressed_length))) {
