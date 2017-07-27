@@ -34,7 +34,7 @@ DECOBJ = $(BROTLIOBJ)/dec/*.o
 COMMONOBJ = $(BROTLIOBJ)/common/*.o
 
 OBJS = $(patsubst %, $(SRCDIR)/%, $(OUROBJ))
-EXECUTABLES=woff2_compress woff2_decompress
+EXECUTABLES=woff2_compress woff2_decompress woff2_info
 EXE_OBJS=$(patsubst %, $(SRCDIR)/%.o, $(EXECUTABLES))
 ARCHIVES=convert_woff2ttf_fuzzer convert_woff2ttf_fuzzer_new_entry
 ARCHIVE_OBJS=$(patsubst %, $(SRCDIR)/%.o, $(ARCHIVES))
