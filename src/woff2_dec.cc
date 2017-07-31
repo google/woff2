@@ -876,9 +876,24 @@ bool ReconstructFont(uint8_t* transformed_buf,
   std::vector<Table*> tables = Tables(hdr, font_index);
 
   // 'glyf' without 'loca' doesn't make sense
-  if (PREDICT_FALSE(static_cast<bool>(FindTable(&tables, kGlyfTableTag)) !=
-                    static_cast<bool>(FindTable(&tables, kLocaTableTag)))) {
+  const Table* glyf_table = FindTable(&tables, kGlyfTableTag);
+  const Table* loca_table = FindTable(&tables, kLocaTableTag);
+  if (PREDICT_FALSE(static_cast<bool>(glyf_table) !=
+                    static_cast<bool>(loca_table))) {
+#ifdef FONT_COMPRESSION_BIN
+      fprintf(stderr, "Cannot have just one of glyf/loca\n");
+#endif
     return FONT_COMPRESSION_FAILURE();
+  }
+
+  if (glyf_table != NULL) {
+    if (PREDICT_FALSE((glyf_table->flags & kWoff2FlagsTransform)
+                      != (loca_table->flags & kWoff2FlagsTransform))) {
+#ifdef FONT_COMPRESSION_BIN
+      fprintf(stderr, "Cannot transform just one of glyf/loca\n");
+#endif
+      return FONT_COMPRESSION_FAILURE();
+    }
   }
 
   uint32_t font_checksum = metadata->header_checksum;
@@ -1100,8 +1115,9 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
 
       ttc_font.table_indices.resize(num_tables);
 
-      const Table* glyf_table = NULL;
-      const Table* loca_table = NULL;
+
+      unsigned int glyf_idx = 0;
+      unsigned int loca_idx = 0;
 
       for (uint32_t j = 0; j < num_tables; j++) {
         unsigned int table_idx;
@@ -1113,19 +1129,23 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
 
         const Table& table = hdr->tables[table_idx];
         if (table.tag == kLocaTableTag) {
-          loca_table = &table;
+          loca_idx = table_idx;
         }
         if (table.tag == kGlyfTableTag) {
-          glyf_table = &table;
+          glyf_idx = table_idx;
         }
 
       }
 
-      if (PREDICT_FALSE((glyf_table == NULL) != (loca_table == NULL))) {
+      // if we have both glyf and loca make sure they are consecutive
+      // if we have just one we'll reject the font elsewhere
+      if (glyf_idx > 0 || loca_idx > 0) {
+        if (PREDICT_FALSE(glyf_idx > loca_idx || loca_idx - glyf_idx != 1)) {
 #ifdef FONT_COMPRESSION_BIN
-        fprintf(stderr, "Cannot have just one of glyf/loca\n");
+        fprintf(stderr, "TTC font %d has non-consecutive glyf/loca\n", i);
 #endif
-        return FONT_COMPRESSION_FAILURE();
+          return FONT_COMPRESSION_FAILURE();
+        }
       }
     }
   }
