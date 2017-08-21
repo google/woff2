@@ -296,7 +296,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
   }
 
 #ifdef FONT_COMPRESSION_BIN
-  fprintf(stderr, "Compressed %zu to %u.\n", total_transform_length,
+  fprintf(stdout, "Compressed %zu to %u.\n", total_transform_length,
           total_compressed_length);
 #endif
 
