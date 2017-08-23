@@ -411,6 +411,14 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
     return FONT_COMPRESSION_FAILURE();
   }
 
+  // https://dev.w3.org/webfonts/WOFF2/spec/#conform-mustRejectLoca
+  // dst_length here is origLength in the spec
+  uint32_t expected_loca_dst_length = (info->index_format ? 4 : 2)
+    * (static_cast<uint32_t>(info->num_glyphs) + 1);
+  if (PREDICT_FALSE(loca_table->dst_length != expected_loca_dst_length)) {
+    return FONT_COMPRESSION_FAILURE();
+  }
+
   unsigned int offset = (2 + kNumSubStreams) * 4;
   if (PREDICT_FALSE(offset > glyf_table->transform_length)) {
     return FONT_COMPRESSION_FAILURE();
@@ -669,6 +677,14 @@ bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
   bool has_proportional_lsbs = (hmtx_flags & 1) == 0;
   bool has_monospace_lsbs = (hmtx_flags & 2) == 0;
 
+  // Bits 2-7 are reserved and MUST be zero.
+  if ((hmtx_flags & 0xFC) != 0) {
+#ifdef FONT_COMPRESSION_BIN
+    fprintf(stderr, "Illegal hmtx flags; bits 2-7 must be 0\n");
+#endif
+    return FONT_COMPRESSION_FAILURE();
+  }
+
   // you say you transformed but there is little evidence of it
   if (has_proportional_lsbs && has_monospace_lsbs) {
     return FONT_COMPRESSION_FAILURE();
@@ -914,7 +930,7 @@ bool ReconstructFont(uint8_t* transformed_buf,
 
     // TODO(user) a collection with optimized hmtx that reused glyf/loca
     // would fail. We don't optimize hmtx for collections yet.
-    if (PREDICT_FALSE(static_cast<uint64_t>(table.src_offset + table.src_length)
+    if (PREDICT_FALSE(static_cast<uint64_t>(table.src_offset) + table.src_length
         > transformed_buf_size)) {
       return FONT_COMPRESSION_FAILURE();
     }
