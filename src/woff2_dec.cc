@@ -600,6 +600,14 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
             instruction_size, glyph_buf.get(), glyph_buf_size, &glyph_size))) {
         return FONT_COMPRESSION_FAILURE();
       }
+    } else {
+      // n_contours == 0; empty glyph. Must NOT have a bbox.
+      if (PREDICT_FALSE(have_bbox)) {
+#ifdef FONT_COMPRESSION_BIN
+        fprintf(stderr, "Empty glyph has a bbox\n");
+#endif
+        return FONT_COMPRESSION_FAILURE();
+      }
     }
 
     loca_values[i] = out->Size() - glyf_start;
