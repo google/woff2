@@ -14,7 +14,7 @@
 //
 // Library for converting TTF format font files to their WOFF2 versions.
 
-#include "./woff2_enc.h"
+#include <woff2/encode.h>
 
 #include <stdlib.h>
 #include <complex>
