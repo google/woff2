@@ -1,6 +1,6 @@
 OS := $(shell uname)
 
-CPPFLAGS = -I./brotli/include/ -I./src
+CPPFLAGS = -I./brotli/c/include/ -I./src
 
 AR ?= ar
 CC ?= gcc
@@ -28,7 +28,7 @@ OUROBJ = font.o glyph.o normalize.o table_tags.o transform.o \
          variable_length.o
 
 BROTLI = brotli
-BROTLIOBJ = $(BROTLI)/bin/obj
+BROTLIOBJ = $(BROTLI)/bin/obj/c
 ENCOBJ = $(BROTLIOBJ)/enc/*.o
 DECOBJ = $(BROTLIOBJ)/dec/*.o
 COMMONOBJ = $(BROTLIOBJ)/common/*.o
