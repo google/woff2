@@ -6,6 +6,9 @@
 
 /* Library for converting WOFF2 format font files to their TTF versions. */
 
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
+
 #include "./woff2_dec.h"
 
 #include <stdlib.h>
