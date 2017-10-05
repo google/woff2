@@ -11,13 +11,16 @@ CANONICAL_PREFIXES ?= -no-canonical-prefixes
 NOISY_LOGGING ?= -DFONT_COMPRESSION_BIN
 COMMON_FLAGS = -fno-omit-frame-pointer $(CANONICAL_PREFIXES) $(NOISY_LOGGING) -D __STDC_FORMAT_MACROS
 
+ARFLAGS = cr
+
 ifeq ($(OS), Darwin)
   CPPFLAGS += -DOS_MACOSX
 else
   COMMON_FLAGS += -fno-tree-vrp
+  ARFLAGS += f
 endif
 
-ARFLAGS = crf
+
 CFLAGS += $(COMMON_FLAGS)
 CXXFLAGS += $(COMMON_FLAGS) -std=c++11
 
