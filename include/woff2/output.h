@@ -37,15 +37,11 @@
 #include <cstring>
 #include <memory>
 #include <string>
-#include "./port.h"
 
 namespace woff2 {
 
 // Suggested max size for output.
 const size_t kDefaultMaxSize = 30 * 1024 * 1024;
-
-using std::string;
-
 
 /**
  * Output interface for the woff2 decoding.
@@ -79,7 +75,7 @@ class WOFF2StringOut : public WOFF2Out {
   // Create a writer that writes its data to buf.
   // buf->size() will grow to at most max_size
   // buf may be sized (e.g. using EstimateWOFF2FinalSize) or empty.
-  explicit WOFF2StringOut(string* buf);
+  explicit WOFF2StringOut(std::string* buf);
 
   bool Write(const void *buf, size_t n) override;
   bool Write(const void *buf, size_t offset, size_t n) override;
@@ -87,7 +83,7 @@ class WOFF2StringOut : public WOFF2Out {
   size_t MaxSize() { return max_size_; }
   void SetMaxSize(size_t max_size);
  private:
-  string* buf_;
+  std::string* buf_;
   size_t max_size_;
   size_t offset_;
 };

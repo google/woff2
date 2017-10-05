@@ -14,7 +14,9 @@
 //
 // Output buffer for WOFF2 decompression.
 
-#include "./woff2_out.h"
+#include <woff2/output.h>
+
+using std::string;
 
 namespace woff2 {
 

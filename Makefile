@@ -1,6 +1,6 @@
 OS := $(shell uname)
 
-CPPFLAGS = -I./brotli/c/include/ -I./src
+CPPFLAGS = -I./brotli/c/include/ -I./src -I./include
 
 AR ?= ar
 CC ?= gcc
