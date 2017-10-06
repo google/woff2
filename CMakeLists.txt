@@ -19,7 +19,7 @@ option(CANONICAL_PREFIXES "Canonical prefixes" OFF)
 option(NOISY_LOGGING "Noisy logging" ON)
 
 # Version information
-set(WOFF2_VERSION 0.0.1)
+set(WOFF2_VERSION 1.0.1)
 
 # When building shared libraries it is important to set the correct rpath
 # See https://cmake.org/Wiki/CMake_RPATH_handling#Always_full_RPATH
