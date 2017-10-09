@@ -158,7 +158,7 @@ endfunction(generate_pkg_config_path)
 function(generate_pkg_config output_file)
   set (options)
   set (oneValueArgs NAME DESCRIPTION URL VERSION PREFIX LIBDIR INCLUDEDIR)
-  set (multiValueArgs DEPENDS_PRIVATE CFLAGS LIBRARIES)
+  set (multiValueArgs DEPENDS DEPENDS_PRIVATE CFLAGS LIBRARIES)
   cmake_parse_arguments(GEN_PKG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   unset (options)
   unset (oneValueArgs)
@@ -203,6 +203,10 @@ function(generate_pkg_config output_file)
     file(APPEND "${output_file}" "Version: ${GEN_PKG_VERSION}\n")
   endif()
 
+  if(GEN_PKG_DEPENDS)
+    file(APPEND "${output_file}" "Requires: ${GEN_PKG_DEPENDS}\n")
+  endif()
+
   if(GEN_PKG_DEPENDS_PRIVATE)
     file(APPEND "${output_file}" "Requires.private:")
     foreach(lib ${GEN_PKG_DEPENDS_PRIVATE})
@@ -242,6 +246,7 @@ generate_pkg_config ("${CMAKE_CURRENT_BINARY_DIR}/libwoff2dec.pc"
   DESCRIPTION "WOFF2 decoder library"
   URL "https://github.com/google/woff2"
   VERSION "${WOFF2_VERSION}"
+  DEPENDS libbrotlidec
   DEPENDS_PRIVATE libwoff2common
   LIBRARIES woff2dec)
 
@@ -250,6 +255,7 @@ generate_pkg_config ("${CMAKE_CURRENT_BINARY_DIR}/libwoff2enc.pc"
   DESCRIPTION "WOFF2 encoder library"
   URL "https://github.com/google/woff2"
   VERSION "${WOFF2_VERSION}"
+  DEPENDS libbrotlienc
   DEPENDS_PRIVATE libwoff2common
   LIBRARIES woff2enc)
 
