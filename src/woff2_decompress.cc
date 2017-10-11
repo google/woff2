@@ -22,7 +22,13 @@ int main(int argc, char **argv) {
   }
 
   string filename(argv[1]);
-  string outfilename = filename.substr(0, filename.find_last_of(".")) + ".ttf";
+  int lastdot;
+  string outfilename;
+  if ((lastdot = filename.find_last_of(".")) > filename.find_last_of("/")) {
+    outfilename = filename.substr(0, lastdot) + ".woff2";
+  } else {
+    outfilename = filename + ".woff2";
+  }
 
   // Note: update woff2_dec_fuzzer_new_entry.cc if this pattern changes.
   string input = woff2::GetFileContent(filename);

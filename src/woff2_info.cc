@@ -37,9 +37,9 @@ int main(int argc, char **argv) {
   }
 
   string filename(argv[1]);
-  string outfilename = filename.substr(0, filename.find_last_of(".")) + ".woff2";
-  fprintf(stdout, "Processing %s => %s\n",
-    filename.c_str(), outfilename.c_str());
+
+  fprintf(stdout, "Processing %s\n",
+    filename.c_str());
   string input = woff2::GetFileContent(filename);
 
   woff2::Buffer file(reinterpret_cast<const uint8_t*>(input.data()),
