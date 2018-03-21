@@ -7,11 +7,7 @@
 /* A very simple commandline tool for decompressing woff2 format files to true
    type font files. */
 
-#include <string>
-
-#include "./file.h"
-#include <woff2/decode.h>
-
+#include "woff2_decompress.h"
 
 int main(int argc, char **argv) {
   using std::string;
@@ -19,6 +15,26 @@ int main(int argc, char **argv) {
   if (argc != 2) {
     fprintf(stderr, "One argument, the input filename, must be provided.\n");
     return 1;
+  }
+
+  std::string argument = argv[1];
+  if (argument == "--help" || argument == "-h") {
+      std::cout << APPLICATION << std::endl;
+      std::cout << AUTHOR << std::endl;
+      std::cout << LICENSE << std::endl;
+      std::cout << HELPSTRING << std::endl;
+      std::cout << "\n" + USAGESTRING << std::endl;
+      return 0;
+  }
+
+  if (argument == "--usage"){
+      std::cout << USAGESTRING << std::endl;
+      return 0;
+  }
+
+  if (argument == "--version" || argument == "-v") {
+      std::cout << APPLICATION + " " + VERSION << std::endl;
+      return 0;
   }
 
   string filename(argv[1]);
