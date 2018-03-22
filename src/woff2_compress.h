@@ -8,7 +8,6 @@
 #define WOFF2_WOFF2_COMPRESS_H_
 
 #include <string>
-#include <iostream>
 
 #include "file.h"
 #include <woff2/encode.h>
@@ -18,7 +17,7 @@
 #define APPLICATION string("woff2_compress")
 #define AUTHOR string("Copyright 2013 Google Inc.")
 #define LICENSE string("MIT License")
-#define HELPSTRING string("\nInclude a single *.ttf or *.otf font file path argument to compile to a *.woff2 font file.")
+#define HELPSTRING string("Include a single *.ttf or *.otf font file path argument to compile to a *.woff2 font file.")
 #define USAGESTRING string("Usage: woff2_compress [font file path]")
 
 #endif // WOFF2_WOFF2_COMPRESS_H_
