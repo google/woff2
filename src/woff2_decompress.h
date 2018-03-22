@@ -8,7 +8,6 @@
 #define WOFF2_WOFF2_DECOMPRESS_H_
 
 #include <string>
-#include <iostream>
 
 #include "file.h"
 #include <woff2/decode.h>
@@ -18,7 +17,7 @@
 #define APPLICATION string("woff2_decompress")
 #define AUTHOR string("Copyright 2013 Google Inc.")
 #define LICENSE string("MIT License")
-#define HELPSTRING string("\nInclude a single *.woff2 font file path as an argument to decode to a *.ttf font.")
+#define HELPSTRING string("Include a single *.woff2 font file path argument to decode to a *.ttf font.")
 #define USAGESTRING string("Usage: woff2_decompress [font file path]")
 
 #endif // WOFF2_WOFF2_DECOMPRESS_H_

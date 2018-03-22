@@ -13,27 +13,28 @@ int main(int argc, char **argv) {
   using std::string;
 
   if (argc != 2) {
-    fprintf(stderr, "One argument, the input filename, must be provided.\n");
-    return 1;
+      fprintf(stderr, "Please include an argument with your command.\n");
+      fprintf(stderr, "%s\n", USAGESTRING.c_str());
+      return 1;
   }
 
-  std::string argument = argv[1];
+  string argument = argv[1];
   if (argument == "--help" || argument == "-h") {
-      std::cout << APPLICATION << std::endl;
-      std::cout << AUTHOR << std::endl;
-      std::cout << LICENSE << std::endl;
-      std::cout << HELPSTRING << std::endl;
-      std::cout << "\n" + USAGESTRING << std::endl;
+      fprintf(stdout, "%s\n", APPLICATION.c_str());
+      fprintf(stdout, "%s\n", AUTHOR.c_str());
+      fprintf(stdout, "%s\n", LICENSE.c_str());
+      fprintf(stdout, "\n%s\n", HELPSTRING.c_str());
+      fprintf(stdout, "\n%s\n", USAGESTRING.c_str());
       return 0;
   }
 
-  if (argument == "--usage"){
-      std::cout << USAGESTRING << std::endl;
+  if (argument == "--usage") {
+      fprintf(stdout, "%s\n", USAGESTRING.c_str());
       return 0;
   }
 
   if (argument == "--version" || argument == "-v") {
-      std::cout << APPLICATION + " " + VERSION << std::endl;
+      fprintf(stdout, "%s %s\n", APPLICATION.c_str(), VERSION.c_str());
       return 0;
   }
 
