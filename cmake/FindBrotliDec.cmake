@@ -13,15 +13,26 @@ find_package(PkgConfig)
 
 pkg_check_modules(PC_BROTLIDEC libbrotlidec)
 
+if(NOT PC_BROTLIDEC_LIBRARIES)
+	# Fall-back for systems without pkg-config; both libraries must
+	# be present, otherwise linking will likely fail for static builds.
+	list(APPEND PC_BROTLIDEC_LIBRARIES brotlidec brotlicommon)
+endif()
+
 find_path(BROTLIDEC_INCLUDE_DIRS
     NAMES brotli/decode.h
     HINTS ${PC_BROTLIDEC_INCLUDEDIR}
 )
 
-find_library(BROTLIDEC_LIBRARIES
-    NAMES brotlidec
-    HINTS ${PC_BROTLIDEC_LIBDIR}
-)
+set(BROTLIDEC_LIBRARIES "")
+foreach(_lib ${PC_BROTLIDEC_LIBRARIES})
+	find_library(BROTLIDEC_PATH_${_lib} ${_lib} HINTS ${PC_BROTLIDEC_LIBRARY_DIRS})
+	if(NOT BROTLIDEC_PATH_${_lib})
+		unset(BROTLIDEC_LIBRARIES)
+		break()
+	endif()
+	list(APPEND BROTLIDEC_LIBRARIES "${BROTLIDEC_PATH_${_lib}}")
+endforeach()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(BrotliDec
