@@ -21,7 +21,14 @@ int main(int argc, char **argv) {
   }
 
   string filename(argv[1]);
-  string outfilename = filename.substr(0, filename.find_last_of(".")) + ".woff2";
+  int lastdot;
+  string outfilename;
+  if ((lastdot = filename.find_last_of(".")) > filename.find_last_of("/")) {
+    outfilename = filename.substr(0, lastdot) + ".woff2";
+  } else {
+    outfilename = filename + ".woff2";
+  }
+
   fprintf(stdout, "Processing %s => %s\n",
     filename.c_str(), outfilename.c_str());
   string input = woff2::GetFileContent(filename);
