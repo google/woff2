@@ -6,18 +6,35 @@
 
 /* A commandline tool for compressing ttf format files to woff2. */
 
-#include <string>
-
-#include "file.h"
-#include <woff2/encode.h>
-
+#include "woff2_compress.h"
 
 int main(int argc, char **argv) {
   using std::string;
 
   if (argc != 2) {
-    fprintf(stderr, "One argument, the input filename, must be provided.\n");
+    fprintf(stderr, "Please include an argument with your command.\n");
+    fprintf(stderr, "%s\n", USAGESTRING.c_str());
     return 1;
+  }
+
+  string argument = argv[1];
+  if (argument == "--help" || argument == "-h") {
+    fprintf(stdout, "%s\n", APPLICATION.c_str());
+    fprintf(stdout, "%s\n", AUTHOR.c_str());
+    fprintf(stdout, "%s\n", LICENSE.c_str());
+    fprintf(stdout, "\n%s\n", HELPSTRING.c_str());
+    fprintf(stdout, "\n%s\n", USAGESTRING.c_str());
+    return 0;
+  }
+  
+  if (argument == "--usage") {
+    fprintf(stdout, "%s\n", USAGESTRING.c_str());
+    return 0;
+  }
+
+  if (argument == "--version" || argument == "-v") {
+    fprintf(stdout, "%s %s\n", APPLICATION.c_str(), VERSION.c_str());
+    return 0;
   }
 
   string filename(argv[1]);
