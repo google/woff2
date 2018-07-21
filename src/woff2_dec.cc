@@ -27,6 +27,7 @@
 #include "./table_tags.h"
 #include "./variable_length.h"
 #include "./woff2_common.h"
+#include "./version.h"
 
 namespace woff2 {
 
@@ -1366,6 +1367,10 @@ bool ConvertWOFF2ToTTF(const uint8_t* data, size_t length,
   }
 
   return true;
+}
+
+uint32_t DecoderVersion (void) {
+	return WOFF2_VERSION;
 }
 
 } // namespace woff2

@@ -31,6 +31,9 @@ bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
 bool ConvertWOFF2ToTTF(const uint8_t *data, size_t length,
                        WOFF2Out* out);
 
+// Returns the woff2 decoder version.
+uint32_t DecoderVersion (void);
+
 } // namespace woff2
 
 #endif  // WOFF2_WOFF2_DEC_H_
