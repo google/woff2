@@ -59,8 +59,8 @@ woff2_decompress myfont.woff2
 
 # References
 
-http://www.w3.org/TR/WOFF2/
-http://www.w3.org/Submission/MTX/
+* https://www.w3.org/TR/WOFF2/
+* https://www.w3.org/Submission/MTX/
 
 Also please refer to documents (currently Google Docs):
 
