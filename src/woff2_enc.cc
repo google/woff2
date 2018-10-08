@@ -14,6 +14,7 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include <brotli/encode.h>
 #include "./buffer.h"
@@ -200,6 +201,13 @@ bool TransformFontCollection(FontCollection* font_collection) {
     if (!TransformGlyfAndLocaTables(&font)) {
 #ifdef FONT_COMPRESSION_BIN
       fprintf(stderr, "glyf/loca transformation failed.\n");
+#endif
+      return FONT_COMPRESSION_FAILURE();
+    }
+
+    if (!TransformHmtxTable(&font)) {
+#ifdef FONT_COMPRESSION_BIN
+      fprintf(stderr, "hmtx transformation failed.\n");
 #endif
       return FONT_COMPRESSION_FAILURE();
     }
