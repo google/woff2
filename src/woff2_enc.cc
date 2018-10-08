@@ -14,7 +14,6 @@
 #include <limits>
 #include <string>
 #include <vector>
-#include <iostream>
 
 #include <brotli/encode.h>
 #include "./buffer.h"
