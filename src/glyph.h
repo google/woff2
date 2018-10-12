@@ -22,17 +22,17 @@ namespace woff2 {
 // is around.
 class Glyph {
  public:
-  Glyph() : instructions_size(0), composite_data_size(0) {}
+  Glyph() {}
 
   // Bounding box.
-  int16_t x_min;
-  int16_t x_max;
-  int16_t y_min;
-  int16_t y_max;
+  int16_t x_min = 0;
+  int16_t x_max = 0;
+  int16_t y_min = 0;
+  int16_t y_max = 0;
 
   // Instructions.
-  uint16_t instructions_size;
-  const uint8_t* instructions_data;
+  uint16_t instructions_size = 0;
+  const uint8_t* instructions_data = 0;
 
   // Data model for simple glyphs.
   struct Point {
@@ -43,9 +43,9 @@ class Glyph {
   std::vector<std::vector<Point> > contours;
 
   // Data for composite glyphs.
-  const uint8_t* composite_data;
-  uint32_t composite_data_size;
-  bool have_instructions;
+  const uint8_t* composite_data = 0;
+  uint32_t composite_data_size = 0;
+  bool have_instructions = false;
 };
 
 // Parses the glyph from the given data. Returns false on parsing failure or

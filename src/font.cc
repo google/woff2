@@ -66,7 +66,7 @@ bool ReadTrueTypeFont(Buffer* file, const uint8_t* data, size_t len,
 
   std::map<uint32_t, uint32_t> intervals;
   for (uint16_t i = 0; i < font->num_tables; ++i) {
-    Font::Table table;
+    Font::Table table = {};
     table.flag_byte = 0;
     table.reuse_of = NULL;
     if (!file->ReadU32(&table.tag) ||
@@ -326,7 +326,7 @@ int NumGlyphs(const Font& font) {
     return 0;
   }
   int index_fmt = IndexFormat(font);
-  int loca_record_size = (index_fmt == 0 ? 2 : 4);
+  uint32_t loca_record_size = (index_fmt == 0 ? 2 : 4);
   if (loca_table->length < loca_record_size) {
     return 0;
   }
