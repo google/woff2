@@ -122,13 +122,13 @@ int main(int argc, char **argv) {
     if (!woff2::Read255UShort(&file, &numFonts)) return 1;
     printf("CollectionHeader 0x%08x %d fonts\n", version, numFonts);
 
-    for (auto i = 0; i < numFonts; i++) {
+    for (auto i = 0u; i < numFonts; i++) {
       uint32_t numTables, flavor;
       if (!woff2::Read255UShort(&file, &numTables)) return 1;
       if (!file.ReadU32(&flavor)) return 1;
       printf("CollectionFontEntry %d flavor 0x%08x %d tables\n", i, flavor,
           numTables);
-      for (auto j = 0; j < numTables; j++) {
+      for (auto j = 0u; j < numTables; j++) {
         uint32_t table_idx;
         if (!woff2::Read255UShort(&file, &table_idx)) return 1;
         if (table_idx >= table_tags.size()) return 1;

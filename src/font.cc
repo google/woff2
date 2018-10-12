@@ -326,7 +326,7 @@ int NumGlyphs(const Font& font) {
     return 0;
   }
   int index_fmt = IndexFormat(font);
-  int loca_record_size = (index_fmt == 0 ? 2 : 4);
+  uint32_t loca_record_size = (index_fmt == 0 ? 2 : 4);
   if (loca_table->length < loca_record_size) {
     return 0;
   }

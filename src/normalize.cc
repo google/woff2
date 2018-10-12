@@ -97,7 +97,7 @@ bool MakeEditableBuffer(Font* font, int tableTag) {
   table->buffer.resize(sz);
   uint8_t* buf = &table->buffer[0];
   memcpy(buf, table->data, table->length);
-  if (PREDICT_FALSE(sz > table->length)) {
+  if (PREDICT_FALSE(static_cast<uint32_t>(sz) > table->length)) {
     memset(buf + table->length, 0, sz - table->length);
   }
   table->data = buf;
