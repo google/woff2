@@ -316,7 +316,7 @@ void ComputeBbox(unsigned int n_points, const Point* points, uint8_t* dst) {
   offset = Store16(dst, offset, x_min);
   offset = Store16(dst, offset, y_min);
   offset = Store16(dst, offset, x_max);
-  offset = Store16(dst, offset, y_max);
+  Store16(dst, offset, y_max);
 }
 
 

@@ -213,7 +213,6 @@ bool FixChecksums(Font* font) {
   size_t offset = 8;
   StoreU32(0, &offset, head_buf);
   uint32_t file_checksum = 0;
-  uint32_t head_checksum = 0;
   for (auto& i : font->tables) {
     Font::Table* table = &i.second;
     if (table->IsReused()) {
@@ -221,10 +220,6 @@ bool FixChecksums(Font* font) {
     }
     table->checksum = ComputeULongSum(table->data, table->length);
     file_checksum += table->checksum;
-
-    if (table->tag == kHeadTableTag) {
-      head_checksum = table->checksum;
-    }
   }
 
   file_checksum += ComputeHeaderChecksum(*font);
