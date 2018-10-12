@@ -331,7 +331,7 @@ bool ConvertTTFToWOFF2(const uint8_t *data, size_t length,
         return false;
       }
 
-      Table table;
+      Table table = {};
       table.tag = src_table.tag;
       table.flags = src_table.flag_byte;
       table.src_length = src_table.length;
