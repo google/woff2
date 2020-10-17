@@ -1,34 +1,35 @@
-﻿This is a README for the font compression reference code. There are several
+# WOFF
+This is a README for the font compression reference code. There are several
 compression related modules in this repository.
 
-brotli/ contains reference code for the Brotli byte-level compression
-algorithm. Note that it is licensed under the MIT license.
+`brotli/` contains reference code for the Brotli byte-level compression
+algorithm. Note that it is licensed under the [MIT license](./LICENSE).
 
-src/ contains the C++ code for compressing and decompressing fonts.
+`src/` contains the C++ code for compressing and decompressing fonts.
 
-# Build & Run
+## Build & Run
 
 This document documents how to run the compression reference code. At this
 writing, the code, while it is intended to produce a bytestream that can be
 reconstructed into a working font, the reference decompression code is not
 done, and the exact format of that bytestream is subject to change.
 
-The build process depends on the g++ compiler.
+The build process depends on the [g++ compiler](https://gcc.gnu.org/).
 
-## Build
+### Build
 
 On a standard Unix-style environment:
 
-```
+```bash
 git clone --recursive https://github.com/google/woff2.git
 cd woff2
 make clean all
 ```
 
-Alternatively, if Brotli is already installed on your system you can use CMake
+Alternatively, if Brotli is already installed on your system you can use [CMake](https://cmake.org/)
 to build executables and libraries:
 
-```
+```bash
 git clone https://github.com/google/woff2.git
 cd woff2
 mkdir out
@@ -48,16 +49,16 @@ make
 make install
 ```
 
-## Run
+### Run
 
 Ensure the binaries from the build process are in your $PATH, then:
 
-```
+```bash
 woff2_compress myfont.ttf
 woff2_decompress myfont.woff2
 ```
 
-# References
+## References
 
 http://www.w3.org/TR/WOFF2/
 http://www.w3.org/Submission/MTX/
