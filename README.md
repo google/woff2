@@ -59,8 +59,8 @@ woff2_decompress myfont.woff2
 
 # References
 
-http://www.w3.org/TR/WOFF2/
-http://www.w3.org/Submission/MTX/
+- [W3C – WOFF File Format 2.0](https://www.w3.org/TR/WOFF2/)
+- [W3C – MicroType Express (MTX) Font Format](https://www.w3.org/Submission/MTX/)
 
 Also please refer to documents (currently Google Docs):
 
