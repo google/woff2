@@ -31,16 +31,7 @@ if ("${isSystemDir}" STREQUAL "-1")
   set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_LIBDIR}")
 endif()
 
-# Find Brotli dependencies
-set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-find_package(BrotliDec)
-if (NOT BROTLIDEC_FOUND)
-    message(FATAL_ERROR "librotlidec is needed to build woff2.")
-endif ()
-find_package(BrotliEnc)
-if (NOT BROTLIENC_FOUND)
-    message(FATAL_ERROR "librotlienc is needed to build woff2.")
-endif ()
+add_subdirectory(brotli)
 
 # Set compiler flags
 if (NOT CANONICAL_PREFIXES)
@@ -65,7 +56,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 # Set search path for our private/public headers as well as Brotli headers
 include_directories("src" "include"
-                    "${BROTLIDEC_INCLUDE_DIRS}" "${BROTLIENC_INCLUDE_DIRS}")
+                    "${BROTLI_INCLUDE_DIRS}")
 
 # Common part used by decoder and encoder
 add_library(woff2common
@@ -77,7 +68,7 @@ add_library(woff2common
 add_library(woff2dec
             src/woff2_dec.cc
             src/woff2_out.cc)
-target_link_libraries(woff2dec woff2common "${BROTLIDEC_LIBRARIES}")
+target_link_libraries(woff2dec woff2common brotlidec)
 add_executable(woff2_decompress src/woff2_decompress.cc)
 target_link_libraries(woff2_decompress woff2dec)
 
@@ -88,7 +79,7 @@ add_library(woff2enc
             src/normalize.cc
             src/transform.cc
             src/woff2_enc.cc)
-target_link_libraries(woff2enc woff2common "${BROTLIENC_LIBRARIES}")
+target_link_libraries(woff2enc woff2common brotlienc)
 add_executable(woff2_compress src/woff2_compress.cc)
 target_link_libraries(woff2_compress woff2enc)
 
