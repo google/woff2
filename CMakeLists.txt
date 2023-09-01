@@ -60,26 +60,29 @@ include_directories("src" "include"
 
 # Common part used by decoder and encoder
 add_library(woff2common
+            STATIC
             src/table_tags.cc
             src/variable_length.cc
             src/woff2_common.cc)
 
 # WOFF2 Decoder
 add_library(woff2dec
+            STATIC
             src/woff2_dec.cc
             src/woff2_out.cc)
-target_link_libraries(woff2dec woff2common brotlidec)
+target_link_libraries(woff2dec woff2common brotlidec-static)
 add_executable(woff2_decompress src/woff2_decompress.cc)
 target_link_libraries(woff2_decompress woff2dec)
 
 # WOFF2 Encoder
 add_library(woff2enc
+            STATIC
             src/font.cc
             src/glyph.cc
             src/normalize.cc
             src/transform.cc
             src/woff2_enc.cc)
-target_link_libraries(woff2enc woff2common brotlienc)
+target_link_libraries(woff2enc woff2common brotlienc-static)
 add_executable(woff2_compress src/woff2_compress.cc)
 target_link_libraries(woff2_compress woff2enc)
 
