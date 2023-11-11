@@ -15,6 +15,7 @@ include(GNUInstallDirs)
 
 # Build options
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+option(INSTALL_TOOLS "Install tools when building shared libraries" OFF)
 option(CANONICAL_PREFIXES "Canonical prefixes" OFF)
 option(NOISY_LOGGING "Noisy logging" ON)
 
@@ -260,7 +261,7 @@ generate_pkg_config ("${CMAKE_CURRENT_BINARY_DIR}/libwoff2enc.pc"
   LIBRARIES woff2enc)
 
 # Installation
-if (NOT BUILD_SHARED_LIBS)
+if (NOT BUILD_SHARED_LIBS OR INSTALL_TOOLS)
   install(
     TARGETS woff2_decompress woff2_compress woff2_info
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
