@@ -61,11 +61,3 @@ woff2_decompress myfont.woff2
 
 http://www.w3.org/TR/WOFF2/
 http://www.w3.org/Submission/MTX/
-
-Also please refer to documents (currently Google Docs):
-
-WOFF Ultra Condensed file format: proposals and discussion of wire format
-issues (PDF is in docs/ directory)
-
-WIFF Ultra Condensed: more discussion of results and compression techniques.
-This tool was used to prepare the data in that document.
