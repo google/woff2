@@ -199,6 +199,13 @@ bool TransformFontCollection(FontCollection* font_collection) {
 #endif
       return FONT_COMPRESSION_FAILURE();
     }
+
+    if (!TransformHmtxTable(&font)) {
+#ifdef FONT_COMPRESSION_BIN
+      fprintf(stderr, "hmtx transformation failed.\n");
+#endif
+      return FONT_COMPRESSION_FAILURE();
+    }
   }
 
   return true;
