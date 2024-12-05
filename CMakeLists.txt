@@ -61,7 +61,7 @@ endif()
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMMON_FLAG}")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMMON_FLAG}")
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
 
 # Set search path for our private/public headers as well as Brotli headers
 include_directories("src" "include"

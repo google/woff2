@@ -13,6 +13,7 @@
 #include <complex>
 #include <cstring>
 #include <limits>
+#include <span>
 #include <string>
 #include <vector>
 #include <map>
@@ -78,8 +79,7 @@ struct WOFF2Header {
   uint32_t flavor;
   uint32_t header_version;
   uint16_t num_tables;
-  uint64_t compressed_offset;
-  uint32_t compressed_length;
+  std::span<const uint8_t> compressed_buf;
   uint32_t uncompressed_size;
   std::vector<Table> tables;  // num_tables unique tables
   std::vector<TtcFont> ttc_fonts;  // metadata to help rebuild font
@@ -121,12 +121,13 @@ bool _SafeIntAddition(int a, int b, int* result) {
   return true;
 }
 
-bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
-    unsigned int n_points, Point* result, size_t* in_bytes_consumed) {
+bool TripletDecode(std::span<const uint8_t> flags_in,
+                   std::span<const uint8_t> in, unsigned int n_points,
+                   Point* result, size_t* in_bytes_consumed) {
   int x = 0;
   int y = 0;
 
-  if (PREDICT_FALSE(n_points > in_size)) {
+  if (PREDICT_FALSE(n_points > in.size())) {
     return FONT_COMPRESSION_FAILURE();
   }
   unsigned int triplet_index = 0;
@@ -145,7 +146,7 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
     } else {
       n_data_bytes = 4;
     }
-    if (PREDICT_FALSE(triplet_index + n_data_bytes > in_size ||
+    if (PREDICT_FALSE(triplet_index + n_data_bytes > in.size() ||
         triplet_index + n_data_bytes < triplet_index)) {
       return FONT_COMPRESSION_FAILURE();
     }
@@ -475,7 +476,7 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
   std::vector<unsigned int> n_points_vec;
   std::unique_ptr<Point[]> points;
   size_t points_size = 0;
-  const uint8_t* bbox_bitmap = bbox_stream.buffer();
+  std::span<const uint8_t> bbox_bitmap = bbox_stream.remaining_buffer();
   // Safe because num_glyphs is bounded
   unsigned int bitmap_length = ((info->num_glyphs + 31) >> 5) << 2;
   if (!bbox_stream.Skip(bitmap_length)) {
@@ -561,19 +562,17 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
       }
       unsigned int flag_size = total_n_points;
       if (PREDICT_FALSE(
-          flag_size > flag_stream.length() - flag_stream.offset())) {
+          flag_size > flag_stream.remaining_length())) {
         return FONT_COMPRESSION_FAILURE();
       }
-      const uint8_t* flags_buf = flag_stream.buffer() + flag_stream.offset();
-      const uint8_t* triplet_buf = glyph_stream.buffer() +
-        glyph_stream.offset();
-      size_t triplet_size = glyph_stream.length() - glyph_stream.offset();
+      std::span<const uint8_t> flags_buf = flag_stream.remaining_buffer();
+      std::span<const uint8_t> triplet_buf = glyph_stream.remaining_buffer();
       size_t triplet_bytes_consumed = 0;
       if (points_size < total_n_points) {
         points_size = total_n_points;
         points.reset(new Point[points_size]);
       }
-      if (PREDICT_FALSE(!TripletDecode(flags_buf, triplet_buf, triplet_size,
+      if (PREDICT_FALSE(!TripletDecode(flags_buf, triplet_buf,
           total_n_points, points.get(), &triplet_bytes_consumed))) {
         return FONT_COMPRESSION_FAILURE();
       }
@@ -796,10 +795,10 @@ bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
 }
 
 bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,
-  const uint8_t* src_buf, size_t src_size) {
+  std::span<const uint8_t> src_buf) {
   size_t uncompressed_size = dst_size;
   BrotliDecoderResult result = BrotliDecoderDecompress(
-      src_size, src_buf, &uncompressed_size, dst_buf);
+      src_buf.size(), src_buf.data(), &uncompressed_size, dst_buf);
   if (PREDICT_FALSE(result != BROTLI_DECODER_RESULT_SUCCESS ||
                     uncompressed_size != dst_size)) {
     return FONT_COMPRESSION_FAILURE();
@@ -1070,8 +1069,8 @@ bool ReconstructFont(uint8_t* transformed_buf,
   return true;
 }
 
-bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
-  Buffer file(data, length);
+bool ReadWOFF2Header(std::span<const uint8_t> input_data, WOFF2Header* hdr) {
+  Buffer file(input_data);
 
   uint32_t signature;
   if (PREDICT_FALSE(!file.ReadU32(&signature) || signature != kWoff2Signature ||
@@ -1082,8 +1081,8 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
   // TODO(user): Should call IsValidVersionTag() here.
 
   uint32_t reported_length;
-  if (PREDICT_FALSE(
-      !file.ReadU32(&reported_length) || length != reported_length)) {
+  if (PREDICT_FALSE(!file.ReadU32(&reported_length) ||
+                    input_data.size() != reported_length)) {
     return FONT_COMPRESSION_FAILURE();
   }
   if (PREDICT_FALSE(!file.ReadU16(&hdr->num_tables) || !hdr->num_tables)) {
@@ -1096,7 +1095,8 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
   if (PREDICT_FALSE(!file.Skip(6))) {
     return FONT_COMPRESSION_FAILURE();
   }
-  if (PREDICT_FALSE(!file.ReadU32(&hdr->compressed_length))) {
+  uint32_t compressed_length;
+  if (PREDICT_FALSE(!file.ReadU32(&compressed_length))) {
     return FONT_COMPRESSION_FAILURE();
   }
   // We don't care about these fields of the header:
@@ -1113,8 +1113,8 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
     return FONT_COMPRESSION_FAILURE();
   }
   if (meta_offset) {
-    if (PREDICT_FALSE(
-        meta_offset >= length || length - meta_offset < meta_length)) {
+    if (PREDICT_FALSE(meta_offset >= input_data.size() ||
+                      input_data.size() - meta_offset < meta_length)) {
       return FONT_COMPRESSION_FAILURE();
     }
   }
@@ -1125,8 +1125,8 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
     return FONT_COMPRESSION_FAILURE();
   }
   if (priv_offset) {
-    if (PREDICT_FALSE(
-        priv_offset >= length || length - priv_offset < priv_length)) {
+    if (PREDICT_FALSE(priv_offset >= input_data.size() ||
+                      input_data.size() - priv_offset < priv_length)) {
       return FONT_COMPRESSION_FAILURE();
     }
   }
@@ -1208,20 +1208,21 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
 
   const uint64_t first_table_offset = ComputeOffsetToFirstTable(*hdr);
 
-  hdr->compressed_offset = file.offset();
-  if (PREDICT_FALSE(hdr->compressed_offset >
+  uint64_t compressed_offset = file.offset();
+  if (PREDICT_FALSE(compressed_offset >
                     std::numeric_limits<uint32_t>::max())) {
     return FONT_COMPRESSION_FAILURE();
   }
-  uint64_t src_offset = Round4(hdr->compressed_offset + hdr->compressed_length);
-  uint64_t dst_offset = first_table_offset;
+  hdr->compressed_buf =
+      input_data.subspan(compressed_offset, compressed_length);
+  uint64_t src_offset = Round4(compressed_offset + compressed_length);
 
-
-  if (PREDICT_FALSE(src_offset > length)) {
+  if (PREDICT_FALSE(src_offset > input_data.size())) {
 #ifdef FONT_COMPRESSION_BIN
+    uint64_t dst_offset = first_table_offset;
     fprintf(stderr, "offset fail; src_offset %" PRIu64 " length %lu "
       "dst_offset %" PRIu64 "\n",
-      src_offset, length, dst_offset);
+      src_offset, input_data.size(), dst_offset);
 #endif
     return FONT_COMPRESSION_FAILURE();
   }
@@ -1245,7 +1246,7 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
     }
   }
 
-  if (PREDICT_FALSE(src_offset != Round4(length))) {
+  if (PREDICT_FALSE(src_offset != Round4(input_data.size()))) {
     return FONT_COMPRESSION_FAILURE();
   }
 
@@ -1253,8 +1254,7 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
 }
 
 // Write everything before the actual table data
-bool WriteHeaders(const uint8_t* data, size_t length, RebuildMetadata* metadata,
-                  WOFF2Header* hdr, WOFF2Out* out) {
+bool WriteHeaders(RebuildMetadata* metadata, WOFF2Header* hdr, WOFF2Out* out) {
   std::vector<uint8_t> output(ComputeOffsetToFirstTable(*hdr), 0);
 
   // Re-order tables in output (OTSpec) order
@@ -1355,13 +1355,14 @@ bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
 
 bool ConvertWOFF2ToTTF(const uint8_t* data, size_t length,
                        WOFF2Out* out) {
+  std::span<const uint8_t> input_data(data, length);
   RebuildMetadata metadata;
   WOFF2Header hdr;
-  if (!ReadWOFF2Header(data, length, &hdr)) {
+  if (!ReadWOFF2Header(input_data, &hdr)) {
     return FONT_COMPRESSION_FAILURE();
   }
 
-  if (!WriteHeaders(data, length, &metadata, &hdr, out)) {
+  if (!WriteHeaders(&metadata, &hdr, out)) {
     return FONT_COMPRESSION_FAILURE();
   }
 
@@ -1373,14 +1374,12 @@ bool ConvertWOFF2ToTTF(const uint8_t* data, size_t length,
     return FONT_COMPRESSION_FAILURE();
   }
 
-  const uint8_t* src_buf = data + hdr.compressed_offset;
   std::vector<uint8_t> uncompressed_buf(hdr.uncompressed_size);
   if (PREDICT_FALSE(hdr.uncompressed_size < 1)) {
     return FONT_COMPRESSION_FAILURE();
   }
-  if (PREDICT_FALSE(!Woff2Uncompress(&uncompressed_buf[0],
-                                     hdr.uncompressed_size, src_buf,
-                                     hdr.compressed_length))) {
+  if (PREDICT_FALSE(!Woff2Uncompress(
+          &uncompressed_buf[0], hdr.uncompressed_size, hdr.compressed_buf))) {
     return FONT_COMPRESSION_FAILURE();
   }
 

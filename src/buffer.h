@@ -33,6 +33,7 @@ typedef unsigned __int64 uint64_t;
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <span>
 
 namespace woff2 {
 
@@ -58,9 +59,9 @@ inline bool Failure(const char *f, int l, const char *fn) {
 class Buffer {
  public:
   Buffer(const uint8_t *data, size_t len)
-      : buffer_(data),
-        length_(len),
+      : buffer_(data, len),
         offset_(0) { }
+  Buffer(std::span<const uint8_t> data) : buffer_(data), offset_(0) { }
 
   bool Skip(size_t n_bytes) {
     return Read(NULL, n_bytes);
@@ -70,19 +71,18 @@ class Buffer {
     if (n_bytes > 1024 * 1024 * 1024) {
       return FONT_COMPRESSION_FAILURE();
     }
-    if ((offset_ + n_bytes > length_) ||
-        (offset_ > length_ - n_bytes)) {
+    if (n_bytes > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
     if (data) {
-      std::memcpy(data, buffer_ + offset_, n_bytes);
+      std::memcpy(data, remaining_buffer().data(), n_bytes);
     }
     offset_ += n_bytes;
     return true;
   }
 
   inline bool ReadU8(uint8_t *value) {
-    if (offset_ + 1 > length_) {
+    if (1 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
     *value = buffer_[offset_];
@@ -91,10 +91,10 @@ class Buffer {
   }
 
   bool ReadU16(uint16_t *value) {
-    if (offset_ + 2 > length_) {
+    if (2 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    std::memcpy(value, buffer_ + offset_, sizeof(uint16_t));
+    std::memcpy(value, remaining_buffer().data(), sizeof(uint16_t));
     *value = ntohs(*value);
     offset_ += 2;
     return true;
@@ -105,7 +105,7 @@ class Buffer {
   }
 
   bool ReadU24(uint32_t *value) {
-    if (offset_ + 3 > length_) {
+    if (3 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
     *value = static_cast<uint32_t>(buffer_[offset_]) << 16 |
@@ -116,10 +116,10 @@ class Buffer {
   }
 
   bool ReadU32(uint32_t *value) {
-    if (offset_ + 4 > length_) {
+    if (4 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    std::memcpy(value, buffer_ + offset_, sizeof(uint32_t));
+    std::memcpy(value, remaining_buffer().data(), sizeof(uint32_t));
     *value = ntohl(*value);
     offset_ += 4;
     return true;
@@ -130,32 +130,37 @@ class Buffer {
   }
 
   bool ReadTag(uint32_t *value) {
-    if (offset_ + 4 > length_) {
+    if (4 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    std::memcpy(value, buffer_ + offset_, sizeof(uint32_t));
+    std::memcpy(value, remaining_buffer().data(), sizeof(uint32_t));
     offset_ += 4;
     return true;
   }
 
   bool ReadR64(uint64_t *value) {
-    if (offset_ + 8 > length_) {
+    if (8 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    std::memcpy(value, buffer_ + offset_, sizeof(uint64_t));
+    std::memcpy(value, remaining_buffer().data(), sizeof(uint64_t));
     offset_ += 8;
     return true;
   }
 
-  const uint8_t *buffer() const { return buffer_; }
-  size_t offset() const { return offset_; }
-  size_t length() const { return length_; }
+  inline std::span<const uint8_t> remaining_buffer() const {
+    return buffer_.subspan(offset_);
+  };
+  inline size_t remaining_length() const { return remaining_buffer().size(); }
 
-  void set_offset(size_t newoffset) { offset_ = newoffset; }
+  inline size_t offset() { return offset_; }
+
+  void set_offset(size_t newoffset) {
+    offset_ = newoffset;
+  }
 
  private:
-  const uint8_t * const buffer_;
-  const size_t length_;
+  // A view of the unowned buffer.
+  const std::span<const uint8_t> buffer_;
   size_t offset_;
 };
 
