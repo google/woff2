@@ -863,8 +863,8 @@ bool ReadTableDirectory(Buffer* file, std::vector<Table>* tables,
 }
 
 // Writes a single Offset Table entry
-size_t StoreOffsetTable(uint8_t* result, size_t offset, uint32_t flavor,
-                        uint16_t num_tables) {
+size_t StoreOffsetTable(std::span<uint8_t> result, size_t offset,
+                        uint32_t flavor, uint16_t num_tables) {
   offset = StoreU32(result, offset, flavor);  // sfnt version
   offset = Store16(result, offset, num_tables);  // num_tables
   unsigned max_pow2 = 0;
@@ -879,7 +879,8 @@ size_t StoreOffsetTable(uint8_t* result, size_t offset, uint32_t flavor,
   return offset;
 }
 
-size_t StoreTableEntry(uint8_t* result, uint32_t offset, uint32_t tag) {
+size_t StoreTableEntry(std::span<uint8_t> result, uint32_t offset,
+                       uint32_t tag) {
   offset = StoreU32(result, offset, tag);
   offset = StoreU32(result, offset, 0);
   offset = StoreU32(result, offset, 0);
@@ -1277,7 +1278,7 @@ bool WriteHeaders(RebuildMetadata* metadata, WOFF2Header* hdr, WOFF2Out* out) {
   }
 
   // Start building the font
-  uint8_t* result = &output[0];
+  std::span<uint8_t> result(output);
   size_t offset = 0;
   if (hdr->header_version) {
     // TTC header
