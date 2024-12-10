@@ -527,20 +527,21 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
       }
 
       glyph_size = Store16(glyph_buf_view, glyph_size, n_contours);
-      if (PREDICT_FALSE(!bbox_stream.Read(glyph_buf.get() + glyph_size, 8))) {
+      if (PREDICT_FALSE(
+              !bbox_stream.Read(glyph_buf_view.subspan(glyph_size), 8))) {
         return FONT_COMPRESSION_FAILURE();
       }
       glyph_size += 8;
 
-      if (PREDICT_FALSE(!composite_stream.Read(glyph_buf.get() + glyph_size,
-            composite_size))) {
+      if (PREDICT_FALSE(!composite_stream.Read(
+              glyph_buf_view.subspan(glyph_size), composite_size))) {
         return FONT_COMPRESSION_FAILURE();
       }
       glyph_size += composite_size;
       if (have_instructions) {
         glyph_size = Store16(glyph_buf_view, glyph_size, instruction_size);
-        if (PREDICT_FALSE(!instruction_stream.Read(glyph_buf.get() + glyph_size,
-              instruction_size))) {
+        if (PREDICT_FALSE(!instruction_stream.Read(
+                glyph_buf_view.subspan(glyph_size), instruction_size))) {
           return FONT_COMPRESSION_FAILURE();
         }
         glyph_size += instruction_size;
@@ -601,7 +602,8 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
 
       glyph_size = Store16(glyph_buf_view, glyph_size, n_contours);
       if (have_bbox) {
-        if (PREDICT_FALSE(!bbox_stream.Read(glyph_buf.get() + glyph_size, 8))) {
+        if (PREDICT_FALSE(
+                !bbox_stream.Read(glyph_buf_view.subspan(glyph_size), 8))) {
           return FONT_COMPRESSION_FAILURE();
         }
       } else {
@@ -618,8 +620,8 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
       }
 
       glyph_size = Store16(glyph_buf_view, glyph_size, instruction_size);
-      if (PREDICT_FALSE(!instruction_stream.Read(glyph_buf.get() + glyph_size,
-                                                 instruction_size))) {
+      if (PREDICT_FALSE(!instruction_stream.Read(
+              glyph_buf_view.subspan(glyph_size), instruction_size))) {
         return FONT_COMPRESSION_FAILURE();
       }
       glyph_size += instruction_size;

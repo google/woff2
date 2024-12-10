@@ -64,18 +64,20 @@ class Buffer {
   Buffer(std::span<const uint8_t> data) : buffer_(data), offset_(0) { }
 
   bool Skip(size_t n_bytes) {
-    return Read(NULL, n_bytes);
+    return Read(std::span<uint8_t>(), n_bytes);
   }
 
-  bool Read(uint8_t *data, size_t n_bytes) {
+  bool Read(std::span<uint8_t> data, size_t n_bytes) {
     if (n_bytes > 1024 * 1024 * 1024) {
       return FONT_COMPRESSION_FAILURE();
     }
     if (n_bytes > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    if (data) {
-      std::memcpy(data, remaining_buffer().data(), n_bytes);
+    if (data.size() != 0) {
+      std::span<const uint8_t> buffer_view =
+          remaining_buffer().subspan(0, n_bytes);
+      std::copy(buffer_view.begin(), buffer_view.end(), data.begin());
     }
     offset_ += n_bytes;
     return true;
@@ -94,8 +96,8 @@ class Buffer {
     if (2 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    std::memcpy(value, remaining_buffer().data(), sizeof(uint16_t));
-    *value = ntohs(*value);
+    *value = static_cast<uint32_t>(buffer_[offset_]) << 8 |
+        static_cast<uint32_t>(buffer_[offset_ + 1]);
     offset_ += 2;
     return true;
   }
@@ -119,8 +121,10 @@ class Buffer {
     if (4 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    std::memcpy(value, remaining_buffer().data(), sizeof(uint32_t));
-    *value = ntohl(*value);
+    *value = static_cast<uint32_t>(buffer_[offset_]) << 24 |
+        static_cast<uint32_t>(buffer_[offset_ + 1]) << 16 |
+        static_cast<uint32_t>(buffer_[offset_ + 2]) << 8 |
+        static_cast<uint32_t>(buffer_[offset_ + 3]);
     offset_ += 4;
     return true;
   }
@@ -133,7 +137,10 @@ class Buffer {
     if (4 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    std::memcpy(value, remaining_buffer().data(), sizeof(uint32_t));
+    *value = static_cast<uint32_t>(buffer_[offset_]) |
+        static_cast<uint32_t>(buffer_[offset_ + 1]) << 8 |
+        static_cast<uint32_t>(buffer_[offset_ + 2]) << 16 |
+        static_cast<uint32_t>(buffer_[offset_ + 3]) << 24;
     offset_ += 4;
     return true;
   }
@@ -142,7 +149,14 @@ class Buffer {
     if (8 > remaining_length()) {
       return FONT_COMPRESSION_FAILURE();
     }
-    std::memcpy(value, remaining_buffer().data(), sizeof(uint64_t));
+    *value = static_cast<uint64_t>(buffer_[offset_]) << 56 |
+        static_cast<uint64_t>(buffer_[offset_ + 1]) << 48 |
+        static_cast<uint64_t>(buffer_[offset_ + 2]) << 40 |
+        static_cast<uint64_t>(buffer_[offset_ + 3]) << 32 |
+        static_cast<uint64_t>(buffer_[offset_ + 4]) << 24 |
+        static_cast<uint64_t>(buffer_[offset_ + 5]) << 16 |
+        static_cast<uint64_t>(buffer_[offset_ + 6]) << 8 |
+        static_cast<uint64_t>(buffer_[offset_ + 7]);
     offset_ += 8;
     return true;
   }
