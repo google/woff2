@@ -122,17 +122,17 @@ bool _SafeIntAddition(int a, int b, int* result) {
 }
 
 bool TripletDecode(std::span<const uint8_t> flags_in,
-                   std::span<const uint8_t> in, unsigned int n_points,
-                   Point* result, size_t* in_bytes_consumed) {
+                   std::span<const uint8_t> in, std::span<Point> results,
+                   size_t* in_bytes_consumed) {
   int x = 0;
   int y = 0;
 
-  if (PREDICT_FALSE(n_points > in.size())) {
+  if (PREDICT_FALSE(results.size() > in.size())) {
     return FONT_COMPRESSION_FAILURE();
   }
   unsigned int triplet_index = 0;
 
-  for (unsigned int i = 0; i < n_points; ++i) {
+  for (unsigned int i = 0; i < results.size(); ++i) {
     uint8_t flag = flags_in[i];
     bool on_curve = !(flag >> 7);
     flag &= 0x7f;
@@ -183,7 +183,7 @@ bool TripletDecode(std::span<const uint8_t> flags_in,
     if (!_SafeIntAddition(y, dy, &y)) {
       return false;
     }
-    *result++ = {x, y, on_curve};
+    results[i] = {x, y, on_curve};
   }
   *in_bytes_consumed = triplet_index;
   return true;
@@ -191,10 +191,9 @@ bool TripletDecode(std::span<const uint8_t> flags_in,
 
 // This function stores just the point data. On entry, dst points to the
 // beginning of a simple glyph. Returns true on success.
-bool StorePoints(unsigned int n_points, const Point* points,
-                 unsigned int n_contours, unsigned int instruction_length,
-                 bool has_overlap_bit, std::span<uint8_t> dst,
-                 size_t* glyph_size) {
+bool StorePoints(std::span<const Point> points, unsigned int n_contours,
+                 unsigned int instruction_length, bool has_overlap_bit,
+                 std::span<uint8_t> dst, size_t* glyph_size) {
   // I believe that n_contours < 65536, in which case this is safe. However, a
   // comment and/or an assert would be good.
   unsigned int flag_offset = kEndPtsOfContoursOffset + 2 * n_contours + 2 +
@@ -206,7 +205,7 @@ bool StorePoints(unsigned int n_points, const Point* points,
   unsigned int x_bytes = 0;
   unsigned int y_bytes = 0;
 
-  for (unsigned int i = 0; i < n_points; ++i) {
+  for (unsigned int i = 0; i < points.size(); ++i) {
     const Point& point = points[i];
     int flag = point.on_curve ? kGlyfOnCurve : 0;
     if (has_overlap_bit && i == 0) {
@@ -270,7 +269,7 @@ bool StorePoints(unsigned int n_points, const Point* points,
   int y_offset = flag_offset + x_bytes;
   last_x = 0;
   last_y = 0;
-  for (unsigned int i = 0; i < n_points; ++i) {
+  for (unsigned int i = 0; i < points.size(); ++i) {
     int dx = points[i].x - last_x;
     if (dx == 0) {
       // pass
@@ -298,20 +297,19 @@ bool StorePoints(unsigned int n_points, const Point* points,
 // Compute the bounding box of the coordinates, and store into a glyf buffer.
 // A precondition is that there are at least 10 bytes available.
 // dst should point to the beginning of a 'glyf' record.
-void ComputeBbox(unsigned int n_points, const Point* points,
-                 std::span<uint8_t> dst) {
+void ComputeBbox(std::span<const Point> points, std::span<uint8_t> dst) {
   int x_min = 0;
   int y_min = 0;
   int x_max = 0;
   int y_max = 0;
 
-  if (n_points > 0) {
+  if (points.size() > 0) {
     x_min = points[0].x;
     x_max = points[0].x;
     y_min = points[0].y;
     y_max = points[0].y;
   }
-  for (unsigned int i = 1; i < n_points; ++i) {
+  for (unsigned int i = 1; i < points.size(); ++i) {
     int x = points[i].x;
     int y = points[i].y;
     x_min = std::min(x, x_min);
@@ -476,7 +474,7 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
   std::vector<uint32_t> loca_values(info->num_glyphs + 1);
   std::vector<unsigned int> n_points_vec;
   std::unique_ptr<Point[]> points;
-  size_t points_size = 0;
+  std::span<Point> points_view;
   std::span<const uint8_t> bbox_bitmap = bbox_stream.remaining_buffer();
   // Safe because num_glyphs is bounded
   unsigned int bitmap_length = ((info->num_glyphs + 31) >> 5) << 2;
@@ -570,12 +568,12 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
       std::span<const uint8_t> flags_buf = flag_stream.remaining_buffer();
       std::span<const uint8_t> triplet_buf = glyph_stream.remaining_buffer();
       size_t triplet_bytes_consumed = 0;
-      if (points_size < total_n_points) {
-        points_size = total_n_points;
-        points.reset(new Point[points_size]);
+      if (points_view.size() < total_n_points) {
+        points.reset(new Point[total_n_points]);
+        points_view = std::span(points.get(), total_n_points);
       }
       if (PREDICT_FALSE(!TripletDecode(flags_buf, triplet_buf,
-          total_n_points, points.get(), &triplet_bytes_consumed))) {
+          points_view, &triplet_bytes_consumed))) {
         return FONT_COMPRESSION_FAILURE();
       }
       if (PREDICT_FALSE(!flag_stream.Skip(flag_size))) {
@@ -607,7 +605,7 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
           return FONT_COMPRESSION_FAILURE();
         }
       } else {
-        ComputeBbox(total_n_points, points.get(), glyph_buf_view);
+        ComputeBbox(points_view, glyph_buf_view);
       }
       glyph_size = kEndPtsOfContoursOffset;
       int end_point = -1;
@@ -629,9 +627,9 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
       bool has_overlap_bit =
           has_overlap_bitmap && overlap_bitmap[i >> 3] & (0x80 >> (i & 7));
 
-      if (PREDICT_FALSE(!StorePoints(
-              total_n_points, points.get(), n_contours, instruction_size,
-              has_overlap_bit, glyph_buf_view, &glyph_size))) {
+      if (PREDICT_FALSE(!StorePoints(points_view, n_contours, instruction_size,
+                                     has_overlap_bit, glyph_buf_view,
+                                     &glyph_size))) {
         return FONT_COMPRESSION_FAILURE();
       }
     } else {
