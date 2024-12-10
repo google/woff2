@@ -193,7 +193,7 @@ bool TripletDecode(std::span<const uint8_t> flags_in,
 // beginning of a simple glyph. Returns true on success.
 bool StorePoints(unsigned int n_points, const Point* points,
                  unsigned int n_contours, unsigned int instruction_length,
-                 bool has_overlap_bit, uint8_t* dst, size_t dst_size,
+                 bool has_overlap_bit, std::span<uint8_t> dst,
                  size_t* glyph_size) {
   // I believe that n_contours < 65536, in which case this is safe. However, a
   // comment and/or an assert would be good.
@@ -237,12 +237,12 @@ bool StorePoints(unsigned int n_points, const Point* points,
       repeat_count++;
     } else {
       if (repeat_count != 0) {
-        if (PREDICT_FALSE(flag_offset >= dst_size)) {
+        if (PREDICT_FALSE(flag_offset >= dst.size_bytes())) {
           return FONT_COMPRESSION_FAILURE();
         }
         dst[flag_offset++] = repeat_count;
       }
-      if (PREDICT_FALSE(flag_offset >= dst_size)) {
+      if (PREDICT_FALSE(flag_offset >= dst.size_bytes())) {
         return FONT_COMPRESSION_FAILURE();
       }
       dst[flag_offset++] = flag;
@@ -254,7 +254,7 @@ bool StorePoints(unsigned int n_points, const Point* points,
   }
 
   if (repeat_count != 0) {
-    if (PREDICT_FALSE(flag_offset >= dst_size)) {
+    if (PREDICT_FALSE(flag_offset >= dst.size_bytes())) {
       return FONT_COMPRESSION_FAILURE();
     }
     dst[flag_offset++] = repeat_count;
@@ -262,7 +262,7 @@ bool StorePoints(unsigned int n_points, const Point* points,
   unsigned int xy_bytes = x_bytes + y_bytes;
   if (PREDICT_FALSE(xy_bytes < x_bytes ||
       flag_offset + xy_bytes < flag_offset ||
-      flag_offset + xy_bytes > dst_size)) {
+      flag_offset + xy_bytes > dst.size_bytes())) {
     return FONT_COMPRESSION_FAILURE();
   }
 
@@ -298,7 +298,8 @@ bool StorePoints(unsigned int n_points, const Point* points,
 // Compute the bounding box of the coordinates, and store into a glyf buffer.
 // A precondition is that there are at least 10 bytes available.
 // dst should point to the beginning of a 'glyf' record.
-void ComputeBbox(unsigned int n_points, const Point* points, uint8_t* dst) {
+void ComputeBbox(unsigned int n_points, const Point* points,
+                 std::span<uint8_t> dst) {
   int x_min = 0;
   int y_min = 0;
   int x_max = 0;
@@ -324,7 +325,6 @@ void ComputeBbox(unsigned int n_points, const Point* points, uint8_t* dst) {
   offset = Store16(dst, offset, x_max);
   offset = Store16(dst, offset, y_max);
 }
-
 
 bool SizeOfComposite(Buffer composite_stream, size_t* size,
                      bool* have_instructions) {
@@ -386,18 +386,19 @@ bool StoreLoca(const std::vector<uint32_t>& loca_values, int index_format,
     return FONT_COMPRESSION_FAILURE();
   }
   std::vector<uint8_t> loca_content(loca_size * offset_size);
-  uint8_t* dst = &loca_content[0];
+  std::span<uint8_t> loca_content_view(loca_content);
   size_t offset = 0;
   for (size_t i = 0; i < loca_values.size(); ++i) {
     uint32_t value = loca_values[i];
     if (index_format) {
-      offset = StoreU32(dst, offset, value);
+      offset = StoreU32(loca_content_view, offset, value);
     } else {
-      offset = Store16(dst, offset, value >> 1);
+      offset = Store16(loca_content_view, offset, value >> 1);
     }
   }
-  *checksum = ComputeULongSum(&loca_content[0], loca_content.size());
-  if (PREDICT_FALSE(!out->Write(&loca_content[0], loca_content.size()))) {
+  *checksum = ComputeULongSum(loca_content_view);
+  if (PREDICT_FALSE(
+          !out->Write(loca_content_view.data(), loca_content_view.size()))) {
     return FONT_COMPRESSION_FAILURE();
   }
   return true;
@@ -484,8 +485,8 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
   }
 
   // Temp buffer for glyph's.
-  size_t glyph_buf_size = kDefaultGlyphBuf;
-  std::unique_ptr<uint8_t[]> glyph_buf(new uint8_t[glyph_buf_size]);
+  std::unique_ptr<uint8_t[]> glyph_buf(new uint8_t[kDefaultGlyphBuf]);
+  std::span<uint8_t> glyph_buf_view(glyph_buf.get(), kDefaultGlyphBuf);
 
   info->x_mins.resize(info->num_glyphs);
   for (unsigned int i = 0; i < info->num_glyphs; ++i) {
@@ -520,12 +521,12 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
       }
 
       size_t size_needed = 12 + composite_size + instruction_size;
-      if (PREDICT_FALSE(glyph_buf_size < size_needed)) {
+      if (PREDICT_FALSE(glyph_buf_view.size() < size_needed)) {
         glyph_buf.reset(new uint8_t[size_needed]);
-        glyph_buf_size = size_needed;
+        glyph_buf_view = std::span(glyph_buf.get(), size_needed);
       }
 
-      glyph_size = Store16(glyph_buf.get(), glyph_size, n_contours);
+      glyph_size = Store16(glyph_buf_view, glyph_size, n_contours);
       if (PREDICT_FALSE(!bbox_stream.Read(glyph_buf.get() + glyph_size, 8))) {
         return FONT_COMPRESSION_FAILURE();
       }
@@ -537,7 +538,7 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
       }
       glyph_size += composite_size;
       if (have_instructions) {
-        glyph_size = Store16(glyph_buf.get(), glyph_size, instruction_size);
+        glyph_size = Store16(glyph_buf_view, glyph_size, instruction_size);
         if (PREDICT_FALSE(!instruction_stream.Read(glyph_buf.get() + glyph_size,
               instruction_size))) {
           return FONT_COMPRESSION_FAILURE();
@@ -593,18 +594,18 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
       }
       size_t size_needed = 12 + 2 * n_contours + 5 * total_n_points
                            + instruction_size;
-      if (PREDICT_FALSE(glyph_buf_size < size_needed)) {
+      if (PREDICT_FALSE(glyph_buf_view.size() < size_needed)) {
         glyph_buf.reset(new uint8_t[size_needed]);
-        glyph_buf_size = size_needed;
+        glyph_buf_view = std::span(glyph_buf.get(), size_needed);
       }
 
-      glyph_size = Store16(glyph_buf.get(), glyph_size, n_contours);
+      glyph_size = Store16(glyph_buf_view, glyph_size, n_contours);
       if (have_bbox) {
         if (PREDICT_FALSE(!bbox_stream.Read(glyph_buf.get() + glyph_size, 8))) {
           return FONT_COMPRESSION_FAILURE();
         }
       } else {
-        ComputeBbox(total_n_points, points.get(), glyph_buf.get());
+        ComputeBbox(total_n_points, points.get(), glyph_buf_view);
       }
       glyph_size = kEndPtsOfContoursOffset;
       int end_point = -1;
@@ -613,10 +614,10 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
         if (PREDICT_FALSE(end_point >= 65536)) {
           return FONT_COMPRESSION_FAILURE();
         }
-        glyph_size = Store16(glyph_buf.get(), glyph_size, end_point);
+        glyph_size = Store16(glyph_buf_view, glyph_size, end_point);
       }
 
-      glyph_size = Store16(glyph_buf.get(), glyph_size, instruction_size);
+      glyph_size = Store16(glyph_buf_view, glyph_size, instruction_size);
       if (PREDICT_FALSE(!instruction_stream.Read(glyph_buf.get() + glyph_size,
                                                  instruction_size))) {
         return FONT_COMPRESSION_FAILURE();
@@ -628,7 +629,7 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
 
       if (PREDICT_FALSE(!StorePoints(
               total_n_points, points.get(), n_contours, instruction_size,
-              has_overlap_bit, glyph_buf.get(), glyph_buf_size, &glyph_size))) {
+              has_overlap_bit, glyph_buf_view, &glyph_size))) {
         return FONT_COMPRESSION_FAILURE();
       }
     } else {
@@ -655,7 +656,7 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
 
     // We may need x_min to reconstruct 'hmtx'
     if (n_contours > 0) {
-      Buffer x_min_buf(glyph_buf.get() + 2, 2);
+      Buffer x_min_buf(glyph_buf_view.subspan<2, 2>());
       if (PREDICT_FALSE(!x_min_buf.ReadS16(&info->x_mins[i]))) {
         return FONT_COMPRESSION_FAILURE();
       }
@@ -924,7 +925,7 @@ bool ReconstructFont(std::span<uint8_t> transformed_buf,
                      size_t font_index,
                      WOFF2Out* out) {
   size_t dest_offset = out->Size();
-  uint8_t table_entry[12];
+  std::array<uint8_t, 12> table_entry;
   WOFF2FontInfo* info = &metadata->font_infos[font_index];
   std::vector<Table*> tables = Tables(hdr, font_index);
 
@@ -1034,13 +1035,13 @@ bool ReconstructFont(std::span<uint8_t> transformed_buf,
     StoreU32(table_entry, 0, checksum);
     StoreU32(table_entry, 4, table.dst_offset);
     StoreU32(table_entry, 8, table.dst_length);
-    if (PREDICT_FALSE(!out->Write(table_entry,
-        info->table_entry_by_tag[table.tag] + 4, 12))) {
+    if (PREDICT_FALSE(!out->Write(table_entry.data(),
+        info->table_entry_by_tag[table.tag] + 4, table_entry.size()))) {
       return FONT_COMPRESSION_FAILURE();
     }
 
     // We replaced 0's. Update overall checksum.
-    font_checksum += ComputeULongSum(table_entry, 12);
+    font_checksum += ComputeULongSum(table_entry);
 
     if (PREDICT_FALSE(!Pad4(out))) {
       return FONT_COMPRESSION_FAILURE();
@@ -1059,10 +1060,11 @@ bool ReconstructFont(std::span<uint8_t> transformed_buf,
     if (PREDICT_FALSE(head_table->dst_length < 12)) {
       return FONT_COMPRESSION_FAILURE();
     }
-    uint8_t checksum_adjustment[4];
+    std::array<uint8_t, 4> checksum_adjustment;
     StoreU32(checksum_adjustment, 0, 0xB1B0AFBA - font_checksum);
-    if (PREDICT_FALSE(!out->Write(checksum_adjustment,
-                                  head_table->dst_offset + 8, 4))) {
+    if (PREDICT_FALSE(!out->Write(checksum_adjustment.data(),
+                                  head_table->dst_offset + 8,
+                                  checksum_adjustment.size()))) {
       return FONT_COMPRESSION_FAILURE();
     }
   }
