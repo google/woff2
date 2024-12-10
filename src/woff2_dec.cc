@@ -652,7 +652,7 @@ bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
       return FONT_COMPRESSION_FAILURE();
     }
 
-    *glyf_checksum += ComputeULongSum(glyph_buf.get(), glyph_size);
+    *glyf_checksum += ComputeULongSum(glyph_buf_view.subspan(0, glyph_size));
 
     // We may need x_min to reconstruct 'hmtx'
     if (n_contours > 0) {
@@ -774,19 +774,19 @@ bool ReconstructTransformedHmtx(std::span<const uint8_t> transformed_buf,
   }
 
   // bake me a shiny new hmtx table
-  uint32_t hmtx_output_size = 2 * num_glyphs + 2 * num_hmetrics;
-  std::vector<uint8_t> hmtx_table(hmtx_output_size);
-  std::span<uint8_t> dst(hmtx_table);
-  size_t dst_offset = 0;
+  std::vector<uint8_t> hmtx_table(2 * num_glyphs + 2 * num_hmetrics);
+  std::span<uint8_t> hmtx_table_view(hmtx_table);
+  size_t hmtx_table_view_offset = 0;
   for (uint32_t i = 0; i < num_glyphs; i++) {
     if (i < num_hmetrics) {
-      Store16(advance_widths[i], &dst_offset, dst);
+      Store16(advance_widths[i], &hmtx_table_view_offset, hmtx_table_view);
     }
-    Store16(lsbs[i], &dst_offset, dst);
+    Store16(lsbs[i], &hmtx_table_view_offset, hmtx_table_view);
   }
 
-  *checksum = ComputeULongSum(&hmtx_table[0], hmtx_output_size);
-  if (PREDICT_FALSE(!out->Write(&hmtx_table[0], hmtx_output_size))) {
+  *checksum = ComputeULongSum(hmtx_table_view);
+  if (PREDICT_FALSE(
+          !out->Write(hmtx_table_view.data(), hmtx_table_view.size()))) {
     return FONT_COMPRESSION_FAILURE();
   }
 
@@ -1280,7 +1280,7 @@ bool WriteHeaders(RebuildMetadata* metadata, WOFF2Header* hdr, WOFF2Out* out) {
   }
 
   // Start building the font
-  std::span<uint8_t> result(output);
+  const std::span<uint8_t> result(output);
   size_t offset = 0;
   if (hdr->header_version) {
     // TTC header
@@ -1318,8 +1318,8 @@ bool WriteHeaders(RebuildMetadata* metadata, WOFF2Header* hdr, WOFF2Out* out) {
         offset = StoreTableEntry(result, offset, tag);
       }
 
-      ttc_font.header_checksum = ComputeULongSum(&output[ttc_font.dst_offset],
-                                                 offset - ttc_font.dst_offset);
+      ttc_font.header_checksum = ComputeULongSum(
+          result.subspan(ttc_font.dst_offset, offset - ttc_font.dst_offset));
     }
   } else {
     metadata->font_infos.resize(1);
@@ -1333,7 +1333,7 @@ bool WriteHeaders(RebuildMetadata* metadata, WOFF2Header* hdr, WOFF2Out* out) {
   if (PREDICT_FALSE(!out->Write(&output[0], output.size()))) {
     return FONT_COMPRESSION_FAILURE();
   }
-  metadata->header_checksum = ComputeULongSum(&output[0], output.size());
+  metadata->header_checksum = ComputeULongSum(output);
   return true;
 }
 

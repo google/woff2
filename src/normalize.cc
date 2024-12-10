@@ -219,7 +219,7 @@ bool FixChecksums(Font* font) {
     if (table->IsReused()) {
       table = table->reuse_of;
     }
-    table->checksum = ComputeULongSum(table->data, table->length);
+    table->checksum = ComputeULongSum(std::span(table->data, table->length));
     file_checksum += table->checksum;
 
     if (table->tag == kHeadTableTag) {

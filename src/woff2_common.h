@@ -57,9 +57,8 @@ struct Table {
 // True Type Collections
 size_t CollectionHeaderSize(uint32_t header_version, uint32_t num_fonts);
 
-// Compute checksum over size bytes of buf
+// Compute checksum over buf
 uint32_t ComputeULongSum(std::span<const uint8_t> buf);
-uint32_t ComputeULongSum(const uint8_t* buf, size_t size);
 
 } // namespace woff2
 

@@ -35,10 +35,6 @@ uint32_t ComputeULongSum(std::span<const uint8_t> buf) {
   return checksum;
 }
 
-uint32_t ComputeULongSum(const uint8_t* buf, size_t size) {
-  return ComputeULongSum(std::span(buf, size));
-}
-
 size_t CollectionHeaderSize(uint32_t header_version, uint32_t num_fonts) {
   size_t size = 0;
   if (header_version == 0x00020000) {
