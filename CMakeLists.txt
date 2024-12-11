@@ -108,6 +108,9 @@ add_library(convert_woff2ttf_fuzzer STATIC src/convert_woff2ttf_fuzzer.cc)
 target_link_libraries(convert_woff2ttf_fuzzer woff2dec)
 add_library(convert_woff2ttf_fuzzer_new_entry STATIC src/convert_woff2ttf_fuzzer_new_entry.cc)
 target_link_libraries(convert_woff2ttf_fuzzer_new_entry woff2dec)
+add_library(enc_dec_fuzzer STATIC src/enc_dec_fuzzer.cc)
+target_link_libraries(enc_dec_fuzzer woff2dec woff2enc)
+# clang++ -fsanitize=fuzzer -o enc_dec_fuzzer libwoff2common.so libwoff2dec.so libwoff2enc.so libenc_dec_fuzzer.a
 
 # PC files
 include(CMakeParseArguments)
