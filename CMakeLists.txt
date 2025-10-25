@@ -3,11 +3,7 @@
 # Distributed under MIT license.
 # See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
 
-# Ubuntu 12.04 LTS has CMake 2.8.7, and is an important target since
-# several CI services, such as Travis and Drone, use it.  Solaris 11
-# has 2.8.6, and it's not difficult to support if you already have to
-# support 2.8.7.
-cmake_minimum_required(VERSION 2.8.6)
+cmake_minimum_required(VERSION 3.5.0)
 
 project(woff2)
 
