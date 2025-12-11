@@ -31,7 +31,7 @@ static const int32_t kFLAG_WE_HAVE_INSTRUCTIONS = 1 << 8;
 
 bool ReadCompositeGlyphData(Buffer* buffer, Glyph* glyph) {
   glyph->have_instructions = false;
-  glyph->composite_data = buffer->buffer() + buffer->offset();
+  glyph->composite_data = buffer->remaining_buffer().data();
   size_t start_offset = buffer->offset();
   uint16_t flags = kFLAG_MORE_COMPONENTS;
   while (flags & kFLAG_MORE_COMPONENTS) {
