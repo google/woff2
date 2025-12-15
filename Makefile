@@ -53,7 +53,7 @@ $(ARCHIVES) : $(ARCHIVE_OBJS) $(OBJS) deps
 	      $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o
 
 $(EXECUTABLES) : $(EXE_OBJS) deps
-	$(CXX) $(LFLAGS) $(OBJS) $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
+	$(CXX) $(LDFLAGS) $(OBJS) $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
 
 deps :
 	$(MAKE) -C $(BROTLI) lib
