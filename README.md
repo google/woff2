@@ -43,6 +43,7 @@ By default, shared libraries are built. To use static linkage, do:
 ```
 cd woff2
 mkdir out-static
+cd out-static
 cmake -DBUILD_SHARED_LIBS=OFF ..
 make
 make install
