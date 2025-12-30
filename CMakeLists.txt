@@ -21,6 +21,11 @@ option(NOISY_LOGGING "Noisy logging" ON)
 # Version information
 set(WOFF2_VERSION 1.0.2)
 
+string(REPLACE "." ";" WOFF2_VERSION_COMPONENTS ${WOFF2_VERSION})
+list(GET WOFF2_VERSION_COMPONENTS 0 WOFF2_VERSION_MAJOR)
+list(GET WOFF2_VERSION_COMPONENTS 1 WOFF2_VERSION_MINOR)
+list(GET WOFF2_VERSION_COMPONENTS 2 WOFF2_VERSION_PATCH)
+
 # When building shared libraries it is important to set the correct rpath
 # See https://cmake.org/Wiki/CMake_RPATH_handling#Always_full_RPATH
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
@@ -30,6 +35,8 @@ list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_LIBDIR}" isS
 if ("${isSystemDir}" STREQUAL "-1")
   set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_LIBDIR}")
 endif()
+
+configure_file(src/version.h.in src/version.h NEWLINE_STYLE UNIX)
 
 # Find Brotli dependencies
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -64,7 +71,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMMON_FLAG}")
 set(CMAKE_CXX_STANDARD 11)
 
 # Set search path for our private/public headers as well as Brotli headers
-include_directories("src" "include"
+include_directories("src" "include" "${CMAKE_CURRENT_BINARY_DIR}/src"
                     "${BROTLIDEC_INCLUDE_DIRS}" "${BROTLIENC_INCLUDE_DIRS}")
 
 # Common part used by decoder and encoder

@@ -1,0 +1,11 @@
+#ifndef WOFF2_VERSION_H
+#define WOFF2_VERSION_H
+
+/* Semantic version, calculated as (MAJOR << 24) | (MINOR << 12) | PATCH */
+#define WOFF2_VERSION \
+	(@WOFF2_VERSION_MAJOR@ << 24) | \
+	(@WOFF2_VERSION_MINOR@ << 12) | \
+	(@WOFF2_VERSION_PATCH@)
+
+#endif
+
