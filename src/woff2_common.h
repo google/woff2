@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <inttypes.h>
 
+#include <span>
 #include <string>
 
 namespace woff2 {
@@ -56,8 +57,8 @@ struct Table {
 // True Type Collections
 size_t CollectionHeaderSize(uint32_t header_version, uint32_t num_fonts);
 
-// Compute checksum over size bytes of buf
-uint32_t ComputeULongSum(const uint8_t* buf, size_t size);
+// Compute checksum over buf
+uint32_t ComputeULongSum(std::span<const uint8_t> buf);
 
 } // namespace woff2
 

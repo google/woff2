@@ -13,6 +13,7 @@
 #include <complex>
 #include <cstring>
 #include <limits>
+#include <span>
 #include <string>
 #include <vector>
 #include <map>
@@ -78,8 +79,7 @@ struct WOFF2Header {
   uint32_t flavor;
   uint32_t header_version;
   uint16_t num_tables;
-  uint64_t compressed_offset;
-  uint32_t compressed_length;
+  std::span<const uint8_t> compressed_buf;
   uint32_t uncompressed_size;
   std::vector<Table> tables;  // num_tables unique tables
   std::vector<TtcFont> ttc_fonts;  // metadata to help rebuild font
@@ -121,17 +121,18 @@ bool _SafeIntAddition(int a, int b, int* result) {
   return true;
 }
 
-bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
-    unsigned int n_points, Point* result, size_t* in_bytes_consumed) {
+bool TripletDecode(std::span<const uint8_t> flags_in,
+                   std::span<const uint8_t> in, std::span<Point> results,
+                   size_t* in_bytes_consumed) {
   int x = 0;
   int y = 0;
 
-  if (PREDICT_FALSE(n_points > in_size)) {
+  if (PREDICT_FALSE(results.size() > in.size())) {
     return FONT_COMPRESSION_FAILURE();
   }
   unsigned int triplet_index = 0;
 
-  for (unsigned int i = 0; i < n_points; ++i) {
+  for (unsigned int i = 0; i < results.size(); ++i) {
     uint8_t flag = flags_in[i];
     bool on_curve = !(flag >> 7);
     flag &= 0x7f;
@@ -145,7 +146,7 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
     } else {
       n_data_bytes = 4;
     }
-    if (PREDICT_FALSE(triplet_index + n_data_bytes > in_size ||
+    if (PREDICT_FALSE(triplet_index + n_data_bytes > in.size() ||
         triplet_index + n_data_bytes < triplet_index)) {
       return FONT_COMPRESSION_FAILURE();
     }
@@ -182,7 +183,7 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
     if (!_SafeIntAddition(y, dy, &y)) {
       return false;
     }
-    *result++ = {x, y, on_curve};
+    results[i] = {x, y, on_curve};
   }
   *in_bytes_consumed = triplet_index;
   return true;
@@ -190,10 +191,9 @@ bool TripletDecode(const uint8_t* flags_in, const uint8_t* in, size_t in_size,
 
 // This function stores just the point data. On entry, dst points to the
 // beginning of a simple glyph. Returns true on success.
-bool StorePoints(unsigned int n_points, const Point* points,
-                 unsigned int n_contours, unsigned int instruction_length,
-                 bool has_overlap_bit, uint8_t* dst, size_t dst_size,
-                 size_t* glyph_size) {
+bool StorePoints(std::span<const Point> points, unsigned int n_contours,
+                 unsigned int instruction_length, bool has_overlap_bit,
+                 std::span<uint8_t> dst, size_t* glyph_size) {
   // I believe that n_contours < 65536, in which case this is safe. However, a
   // comment and/or an assert would be good.
   unsigned int flag_offset = kEndPtsOfContoursOffset + 2 * n_contours + 2 +
@@ -205,7 +205,7 @@ bool StorePoints(unsigned int n_points, const Point* points,
   unsigned int x_bytes = 0;
   unsigned int y_bytes = 0;
 
-  for (unsigned int i = 0; i < n_points; ++i) {
+  for (unsigned int i = 0; i < points.size(); ++i) {
     const Point& point = points[i];
     int flag = point.on_curve ? kGlyfOnCurve : 0;
     if (has_overlap_bit && i == 0) {
@@ -236,12 +236,12 @@ bool StorePoints(unsigned int n_points, const Point* points,
       repeat_count++;
     } else {
       if (repeat_count != 0) {
-        if (PREDICT_FALSE(flag_offset >= dst_size)) {
+        if (PREDICT_FALSE(flag_offset >= dst.size_bytes())) {
           return FONT_COMPRESSION_FAILURE();
         }
         dst[flag_offset++] = repeat_count;
       }
-      if (PREDICT_FALSE(flag_offset >= dst_size)) {
+      if (PREDICT_FALSE(flag_offset >= dst.size_bytes())) {
         return FONT_COMPRESSION_FAILURE();
       }
       dst[flag_offset++] = flag;
@@ -253,7 +253,7 @@ bool StorePoints(unsigned int n_points, const Point* points,
   }
 
   if (repeat_count != 0) {
-    if (PREDICT_FALSE(flag_offset >= dst_size)) {
+    if (PREDICT_FALSE(flag_offset >= dst.size_bytes())) {
       return FONT_COMPRESSION_FAILURE();
     }
     dst[flag_offset++] = repeat_count;
@@ -261,7 +261,7 @@ bool StorePoints(unsigned int n_points, const Point* points,
   unsigned int xy_bytes = x_bytes + y_bytes;
   if (PREDICT_FALSE(xy_bytes < x_bytes ||
       flag_offset + xy_bytes < flag_offset ||
-      flag_offset + xy_bytes > dst_size)) {
+      flag_offset + xy_bytes > dst.size_bytes())) {
     return FONT_COMPRESSION_FAILURE();
   }
 
@@ -269,7 +269,7 @@ bool StorePoints(unsigned int n_points, const Point* points,
   int y_offset = flag_offset + x_bytes;
   last_x = 0;
   last_y = 0;
-  for (unsigned int i = 0; i < n_points; ++i) {
+  for (unsigned int i = 0; i < points.size(); ++i) {
     int dx = points[i].x - last_x;
     if (dx == 0) {
       // pass
@@ -297,19 +297,19 @@ bool StorePoints(unsigned int n_points, const Point* points,
 // Compute the bounding box of the coordinates, and store into a glyf buffer.
 // A precondition is that there are at least 10 bytes available.
 // dst should point to the beginning of a 'glyf' record.
-void ComputeBbox(unsigned int n_points, const Point* points, uint8_t* dst) {
+void ComputeBbox(std::span<const Point> points, std::span<uint8_t> dst) {
   int x_min = 0;
   int y_min = 0;
   int x_max = 0;
   int y_max = 0;
 
-  if (n_points > 0) {
+  if (points.size() > 0) {
     x_min = points[0].x;
     x_max = points[0].x;
     y_min = points[0].y;
     y_max = points[0].y;
   }
-  for (unsigned int i = 1; i < n_points; ++i) {
+  for (unsigned int i = 1; i < points.size(); ++i) {
     int x = points[i].x;
     int y = points[i].y;
     x_min = std::min(x, x_min);
@@ -323,7 +323,6 @@ void ComputeBbox(unsigned int n_points, const Point* points, uint8_t* dst) {
   offset = Store16(dst, offset, x_max);
   offset = Store16(dst, offset, y_max);
 }
-
 
 bool SizeOfComposite(Buffer composite_stream, size_t* size,
                      bool* have_instructions) {
@@ -385,32 +384,33 @@ bool StoreLoca(const std::vector<uint32_t>& loca_values, int index_format,
     return FONT_COMPRESSION_FAILURE();
   }
   std::vector<uint8_t> loca_content(loca_size * offset_size);
-  uint8_t* dst = &loca_content[0];
+  std::span<uint8_t> loca_content_view(loca_content);
   size_t offset = 0;
   for (size_t i = 0; i < loca_values.size(); ++i) {
     uint32_t value = loca_values[i];
     if (index_format) {
-      offset = StoreU32(dst, offset, value);
+      offset = StoreU32(loca_content_view, offset, value);
     } else {
-      offset = Store16(dst, offset, value >> 1);
+      offset = Store16(loca_content_view, offset, value >> 1);
     }
   }
-  *checksum = ComputeULongSum(&loca_content[0], loca_content.size());
-  if (PREDICT_FALSE(!out->Write(&loca_content[0], loca_content.size()))) {
+  *checksum = ComputeULongSum(loca_content_view);
+  if (PREDICT_FALSE(
+          !out->Write(loca_content_view.data(), loca_content_view.size()))) {
     return FONT_COMPRESSION_FAILURE();
   }
   return true;
 }
 
 // Reconstruct entire glyf table based on transformed original
-bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
+bool ReconstructGlyf(std::span<const uint8_t> data, Table* glyf_table,
                      uint32_t* glyf_checksum, Table * loca_table,
                      uint32_t* loca_checksum, WOFF2FontInfo* info,
                      WOFF2Out* out) {
   static const int kNumSubStreams = 7;
-  Buffer file(data, glyf_table->transform_length);
+  Buffer file(data.subspan(glyf_table->transform_length));
   uint16_t version;
-  std::vector<std::pair<const uint8_t*, size_t> > substreams(kNumSubStreams);
+  std::vector<std::span<const uint8_t>> substreams(kNumSubStreams);
   const size_t glyf_start = out->Size();
 
   if (PREDICT_FALSE(!file.ReadU16(&version))) {
@@ -449,22 +449,22 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
     if (PREDICT_FALSE(substream_size > glyf_table->transform_length - offset)) {
       return FONT_COMPRESSION_FAILURE();
     }
-    substreams[i] = std::make_pair(data + offset, substream_size);
+    substreams[i] = data.subspan(offset, substream_size);
     offset += substream_size;
   }
-  Buffer n_contour_stream(substreams[0].first, substreams[0].second);
-  Buffer n_points_stream(substreams[1].first, substreams[1].second);
-  Buffer flag_stream(substreams[2].first, substreams[2].second);
-  Buffer glyph_stream(substreams[3].first, substreams[3].second);
-  Buffer composite_stream(substreams[4].first, substreams[4].second);
-  Buffer bbox_stream(substreams[5].first, substreams[5].second);
-  Buffer instruction_stream(substreams[6].first, substreams[6].second);
+  Buffer n_contour_stream(substreams[0]);
+  Buffer n_points_stream(substreams[1]);
+  Buffer flag_stream(substreams[2]);
+  Buffer glyph_stream(substreams[3]);
+  Buffer composite_stream(substreams[4]);
+  Buffer bbox_stream(substreams[5]);
+  Buffer instruction_stream(substreams[6]);
 
-  const uint8_t* overlap_bitmap = nullptr;
+  std::span<const uint8_t> overlap_bitmap;
   unsigned int overlap_bitmap_length = 0;
   if (has_overlap_bitmap) {
     overlap_bitmap_length = (info->num_glyphs + 7) >> 3;
-    overlap_bitmap = data + offset;
+    overlap_bitmap = data.subspan(offset);
     if (PREDICT_FALSE(overlap_bitmap_length >
                            glyf_table->transform_length - offset)) {
       return FONT_COMPRESSION_FAILURE();
@@ -474,8 +474,8 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
   std::vector<uint32_t> loca_values(info->num_glyphs + 1);
   std::vector<unsigned int> n_points_vec;
   std::unique_ptr<Point[]> points;
-  size_t points_size = 0;
-  const uint8_t* bbox_bitmap = bbox_stream.buffer();
+  std::span<Point> points_view;
+  std::span<const uint8_t> bbox_bitmap = bbox_stream.remaining_buffer();
   // Safe because num_glyphs is bounded
   unsigned int bitmap_length = ((info->num_glyphs + 31) >> 5) << 2;
   if (!bbox_stream.Skip(bitmap_length)) {
@@ -483,8 +483,8 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
   }
 
   // Temp buffer for glyph's.
-  size_t glyph_buf_size = kDefaultGlyphBuf;
-  std::unique_ptr<uint8_t[]> glyph_buf(new uint8_t[glyph_buf_size]);
+  std::unique_ptr<uint8_t[]> glyph_buf(new uint8_t[kDefaultGlyphBuf]);
+  std::span<uint8_t> glyph_buf_view(glyph_buf.get(), kDefaultGlyphBuf);
 
   info->x_mins.resize(info->num_glyphs);
   for (unsigned int i = 0; i < info->num_glyphs; ++i) {
@@ -519,26 +519,27 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
       }
 
       size_t size_needed = 12 + composite_size + instruction_size;
-      if (PREDICT_FALSE(glyph_buf_size < size_needed)) {
+      if (PREDICT_FALSE(glyph_buf_view.size() < size_needed)) {
         glyph_buf.reset(new uint8_t[size_needed]);
-        glyph_buf_size = size_needed;
+        glyph_buf_view = std::span(glyph_buf.get(), size_needed);
       }
 
-      glyph_size = Store16(glyph_buf.get(), glyph_size, n_contours);
-      if (PREDICT_FALSE(!bbox_stream.Read(glyph_buf.get() + glyph_size, 8))) {
+      glyph_size = Store16(glyph_buf_view, glyph_size, n_contours);
+      if (PREDICT_FALSE(
+              !bbox_stream.Read(glyph_buf_view.subspan(glyph_size), 8))) {
         return FONT_COMPRESSION_FAILURE();
       }
       glyph_size += 8;
 
-      if (PREDICT_FALSE(!composite_stream.Read(glyph_buf.get() + glyph_size,
-            composite_size))) {
+      if (PREDICT_FALSE(!composite_stream.Read(
+              glyph_buf_view.subspan(glyph_size), composite_size))) {
         return FONT_COMPRESSION_FAILURE();
       }
       glyph_size += composite_size;
       if (have_instructions) {
-        glyph_size = Store16(glyph_buf.get(), glyph_size, instruction_size);
-        if (PREDICT_FALSE(!instruction_stream.Read(glyph_buf.get() + glyph_size,
-              instruction_size))) {
+        glyph_size = Store16(glyph_buf_view, glyph_size, instruction_size);
+        if (PREDICT_FALSE(!instruction_stream.Read(
+                glyph_buf_view.subspan(glyph_size), instruction_size))) {
           return FONT_COMPRESSION_FAILURE();
         }
         glyph_size += instruction_size;
@@ -561,20 +562,18 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
       }
       unsigned int flag_size = total_n_points;
       if (PREDICT_FALSE(
-          flag_size > flag_stream.length() - flag_stream.offset())) {
+          flag_size > flag_stream.remaining_length())) {
         return FONT_COMPRESSION_FAILURE();
       }
-      const uint8_t* flags_buf = flag_stream.buffer() + flag_stream.offset();
-      const uint8_t* triplet_buf = glyph_stream.buffer() +
-        glyph_stream.offset();
-      size_t triplet_size = glyph_stream.length() - glyph_stream.offset();
+      std::span<const uint8_t> flags_buf = flag_stream.remaining_buffer();
+      std::span<const uint8_t> triplet_buf = glyph_stream.remaining_buffer();
       size_t triplet_bytes_consumed = 0;
-      if (points_size < total_n_points) {
-        points_size = total_n_points;
-        points.reset(new Point[points_size]);
+      if (points_view.size() < total_n_points) {
+        points.reset(new Point[total_n_points]);
+        points_view = std::span(points.get(), total_n_points);
       }
-      if (PREDICT_FALSE(!TripletDecode(flags_buf, triplet_buf, triplet_size,
-          total_n_points, points.get(), &triplet_bytes_consumed))) {
+      if (PREDICT_FALSE(!TripletDecode(flags_buf, triplet_buf,
+          points_view, &triplet_bytes_consumed))) {
         return FONT_COMPRESSION_FAILURE();
       }
       if (PREDICT_FALSE(!flag_stream.Skip(flag_size))) {
@@ -594,18 +593,19 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
       }
       size_t size_needed = 12 + 2 * n_contours + 5 * total_n_points
                            + instruction_size;
-      if (PREDICT_FALSE(glyph_buf_size < size_needed)) {
+      if (PREDICT_FALSE(glyph_buf_view.size() < size_needed)) {
         glyph_buf.reset(new uint8_t[size_needed]);
-        glyph_buf_size = size_needed;
+        glyph_buf_view = std::span(glyph_buf.get(), size_needed);
       }
 
-      glyph_size = Store16(glyph_buf.get(), glyph_size, n_contours);
+      glyph_size = Store16(glyph_buf_view, glyph_size, n_contours);
       if (have_bbox) {
-        if (PREDICT_FALSE(!bbox_stream.Read(glyph_buf.get() + glyph_size, 8))) {
+        if (PREDICT_FALSE(
+                !bbox_stream.Read(glyph_buf_view.subspan(glyph_size), 8))) {
           return FONT_COMPRESSION_FAILURE();
         }
       } else {
-        ComputeBbox(total_n_points, points.get(), glyph_buf.get());
+        ComputeBbox(points_view, glyph_buf_view);
       }
       glyph_size = kEndPtsOfContoursOffset;
       int end_point = -1;
@@ -614,12 +614,12 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
         if (PREDICT_FALSE(end_point >= 65536)) {
           return FONT_COMPRESSION_FAILURE();
         }
-        glyph_size = Store16(glyph_buf.get(), glyph_size, end_point);
+        glyph_size = Store16(glyph_buf_view, glyph_size, end_point);
       }
 
-      glyph_size = Store16(glyph_buf.get(), glyph_size, instruction_size);
-      if (PREDICT_FALSE(!instruction_stream.Read(glyph_buf.get() + glyph_size,
-                                                 instruction_size))) {
+      glyph_size = Store16(glyph_buf_view, glyph_size, instruction_size);
+      if (PREDICT_FALSE(!instruction_stream.Read(
+              glyph_buf_view.subspan(glyph_size), instruction_size))) {
         return FONT_COMPRESSION_FAILURE();
       }
       glyph_size += instruction_size;
@@ -627,9 +627,9 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
       bool has_overlap_bit =
           has_overlap_bitmap && overlap_bitmap[i >> 3] & (0x80 >> (i & 7));
 
-      if (PREDICT_FALSE(!StorePoints(
-              total_n_points, points.get(), n_contours, instruction_size,
-              has_overlap_bit, glyph_buf.get(), glyph_buf_size, &glyph_size))) {
+      if (PREDICT_FALSE(!StorePoints(points_view, n_contours, instruction_size,
+                                     has_overlap_bit, glyph_buf_view,
+                                     &glyph_size))) {
         return FONT_COMPRESSION_FAILURE();
       }
     } else {
@@ -652,11 +652,11 @@ bool ReconstructGlyf(const uint8_t* data, Table* glyf_table,
       return FONT_COMPRESSION_FAILURE();
     }
 
-    *glyf_checksum += ComputeULongSum(glyph_buf.get(), glyph_size);
+    *glyf_checksum += ComputeULongSum(glyph_buf_view.subspan(0, glyph_size));
 
     // We may need x_min to reconstruct 'hmtx'
     if (n_contours > 0) {
-      Buffer x_min_buf(glyph_buf.get() + 2, 2);
+      Buffer x_min_buf(glyph_buf_view.subspan<2, 2>());
       if (PREDICT_FALSE(!x_min_buf.ReadS16(&info->x_mins[i]))) {
         return FONT_COMPRESSION_FAILURE();
       }
@@ -687,10 +687,9 @@ Table* FindTable(std::vector<Table*>* tables, uint32_t tag) {
 }
 
 // Get numberOfHMetrics, https://www.microsoft.com/typography/otspec/hhea.htm
-bool ReadNumHMetrics(const uint8_t* data, size_t data_size,
-                     uint16_t* num_hmetrics) {
+bool ReadNumHMetrics(std::span<const uint8_t> data, uint16_t* num_hmetrics) {
   // Skip 34 to reach 'hhea' numberOfHMetrics
-  Buffer buffer(data, data_size);
+  Buffer buffer(data);
   if (PREDICT_FALSE(!buffer.Skip(34) || !buffer.ReadU16(num_hmetrics))) {
     return FONT_COMPRESSION_FAILURE();
   }
@@ -698,14 +697,13 @@ bool ReadNumHMetrics(const uint8_t* data, size_t data_size,
 }
 
 // http://dev.w3.org/webfonts/WOFF2/spec/Overview.html#hmtx_table_format
-bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
-                                size_t transformed_size,
+bool ReconstructTransformedHmtx(std::span<const uint8_t> transformed_buf,
                                 uint16_t num_glyphs,
                                 uint16_t num_hmetrics,
                                 const std::vector<int16_t>& x_mins,
                                 uint32_t* checksum,
                                 WOFF2Out* out) {
-  Buffer hmtx_buff_in(transformed_buf, transformed_size);
+  Buffer hmtx_buff_in(transformed_buf);
 
   uint8_t hmtx_flags;
   if (PREDICT_FALSE(!hmtx_buff_in.ReadU8(&hmtx_flags))) {
@@ -776,32 +774,32 @@ bool ReconstructTransformedHmtx(const uint8_t* transformed_buf,
   }
 
   // bake me a shiny new hmtx table
-  uint32_t hmtx_output_size = 2 * num_glyphs + 2 * num_hmetrics;
-  std::vector<uint8_t> hmtx_table(hmtx_output_size);
-  uint8_t* dst = &hmtx_table[0];
-  size_t dst_offset = 0;
+  std::vector<uint8_t> hmtx_table(2 * num_glyphs + 2 * num_hmetrics);
+  std::span<uint8_t> hmtx_table_view(hmtx_table);
+  size_t hmtx_table_view_offset = 0;
   for (uint32_t i = 0; i < num_glyphs; i++) {
     if (i < num_hmetrics) {
-      Store16(advance_widths[i], &dst_offset, dst);
+      Store16(advance_widths[i], &hmtx_table_view_offset, hmtx_table_view);
     }
-    Store16(lsbs[i], &dst_offset, dst);
+    Store16(lsbs[i], &hmtx_table_view_offset, hmtx_table_view);
   }
 
-  *checksum = ComputeULongSum(&hmtx_table[0], hmtx_output_size);
-  if (PREDICT_FALSE(!out->Write(&hmtx_table[0], hmtx_output_size))) {
+  *checksum = ComputeULongSum(hmtx_table_view);
+  if (PREDICT_FALSE(
+          !out->Write(hmtx_table_view.data(), hmtx_table_view.size()))) {
     return FONT_COMPRESSION_FAILURE();
   }
 
   return true;
 }
 
-bool Woff2Uncompress(uint8_t* dst_buf, size_t dst_size,
-  const uint8_t* src_buf, size_t src_size) {
-  size_t uncompressed_size = dst_size;
+bool Woff2Uncompress(std::span<uint8_t> dst_buf,
+                     std::span<const uint8_t> src_buf) {
+  size_t uncompressed_size = dst_buf.size_bytes();
   BrotliDecoderResult result = BrotliDecoderDecompress(
-      src_size, src_buf, &uncompressed_size, dst_buf);
+      src_buf.size(), src_buf.data(), &uncompressed_size, dst_buf.data());
   if (PREDICT_FALSE(result != BROTLI_DECODER_RESULT_SUCCESS ||
-                    uncompressed_size != dst_size)) {
+                    uncompressed_size != dst_buf.size_bytes())) {
     return FONT_COMPRESSION_FAILURE();
   }
   return true;
@@ -866,8 +864,8 @@ bool ReadTableDirectory(Buffer* file, std::vector<Table>* tables,
 }
 
 // Writes a single Offset Table entry
-size_t StoreOffsetTable(uint8_t* result, size_t offset, uint32_t flavor,
-                        uint16_t num_tables) {
+size_t StoreOffsetTable(std::span<uint8_t> result, size_t offset,
+                        uint32_t flavor, uint16_t num_tables) {
   offset = StoreU32(result, offset, flavor);  // sfnt version
   offset = Store16(result, offset, num_tables);  // num_tables
   unsigned max_pow2 = 0;
@@ -882,7 +880,8 @@ size_t StoreOffsetTable(uint8_t* result, size_t offset, uint32_t flavor,
   return offset;
 }
 
-size_t StoreTableEntry(uint8_t* result, uint32_t offset, uint32_t tag) {
+size_t StoreTableEntry(std::span<uint8_t> result, uint32_t offset,
+                       uint32_t tag) {
   offset = StoreU32(result, offset, tag);
   offset = StoreU32(result, offset, 0);
   offset = StoreU32(result, offset, 0);
@@ -920,14 +919,13 @@ std::vector<Table*> Tables(WOFF2Header* hdr, size_t font_index) {
 
 // Offset tables assumed to have been written in with 0's initially.
 // WOFF2Header isn't const so we can use [] instead of at() (which upsets FF)
-bool ReconstructFont(uint8_t* transformed_buf,
-                     const uint32_t transformed_buf_size,
+bool ReconstructFont(std::span<uint8_t> transformed_buf,
                      RebuildMetadata* metadata,
                      WOFF2Header* hdr,
                      size_t font_index,
                      WOFF2Out* out) {
   size_t dest_offset = out->Size();
-  uint8_t table_entry[12];
+  std::array<uint8_t, 12> table_entry;
   WOFF2FontInfo* info = &metadata->font_infos[font_index];
   std::vector<Table*> tables = Tables(hdr, font_index);
 
@@ -971,13 +969,17 @@ bool ReconstructFont(uint8_t* transformed_buf,
     // TODO(user) a collection with optimized hmtx that reused glyf/loca
     // would fail. We don't optimize hmtx for collections yet.
     if (PREDICT_FALSE(static_cast<uint64_t>(table.src_offset) + table.src_length
-        > transformed_buf_size)) {
+        > transformed_buf.size())) {
       return FONT_COMPRESSION_FAILURE();
     }
 
+    std::span<uint8_t> transformed_table =
+        transformed_buf.subspan(table.src_offset, table.src_length);
+
     if (table.tag == kHheaTableTag) {
-      if (!ReadNumHMetrics(transformed_buf + table.src_offset,
-          table.src_length, &info->num_hmetrics)) {
+      if (!ReadNumHMetrics(
+              transformed_table,
+              &info->num_hmetrics)) {
         return FONT_COMPRESSION_FAILURE();
       }
     }
@@ -990,13 +992,12 @@ bool ReconstructFont(uint8_t* transformed_buf,
             return FONT_COMPRESSION_FAILURE();
           }
           // checkSumAdjustment = 0
-          StoreU32(transformed_buf + table.src_offset, 8, 0);
+          StoreU32(transformed_table, 8, 0);
         }
         table.dst_offset = dest_offset;
-        checksum = ComputeULongSum(transformed_buf + table.src_offset,
-                                   table.src_length);
-        if (PREDICT_FALSE(!out->Write(transformed_buf + table.src_offset,
-            table.src_length))) {
+        checksum = ComputeULongSum(transformed_table);
+        if (PREDICT_FALSE(!out->Write(transformed_table.data(),
+                                      transformed_table.size_bytes()))) {
           return FONT_COMPRESSION_FAILURE();
         }
       } else {
@@ -1004,8 +1005,9 @@ bool ReconstructFont(uint8_t* transformed_buf,
           table.dst_offset = dest_offset;
 
           Table* loca_table = FindTable(&tables, kLocaTableTag);
-          if (PREDICT_FALSE(!ReconstructGlyf(transformed_buf + table.src_offset,
-              &table, &checksum, loca_table, &loca_checksum, info, out))) {
+          if (PREDICT_FALSE(!ReconstructGlyf(transformed_table, &table,
+                                             &checksum, loca_table,
+                                             &loca_checksum, info, out))) {
             return FONT_COMPRESSION_FAILURE();
           }
         } else if (table.tag == kLocaTableTag) {
@@ -1015,9 +1017,8 @@ bool ReconstructFont(uint8_t* transformed_buf,
           table.dst_offset = dest_offset;
           // Tables are sorted so all the info we need has been gathered.
           if (PREDICT_FALSE(!ReconstructTransformedHmtx(
-              transformed_buf + table.src_offset, table.src_length,
-              info->num_glyphs, info->num_hmetrics, info->x_mins, &checksum,
-              out))) {
+                  transformed_table, info->num_glyphs, info->num_hmetrics,
+                  info->x_mins, &checksum, out))) {
             return FONT_COMPRESSION_FAILURE();
           }
         } else {
@@ -1034,13 +1035,13 @@ bool ReconstructFont(uint8_t* transformed_buf,
     StoreU32(table_entry, 0, checksum);
     StoreU32(table_entry, 4, table.dst_offset);
     StoreU32(table_entry, 8, table.dst_length);
-    if (PREDICT_FALSE(!out->Write(table_entry,
-        info->table_entry_by_tag[table.tag] + 4, 12))) {
+    if (PREDICT_FALSE(!out->Write(table_entry.data(),
+        info->table_entry_by_tag[table.tag] + 4, table_entry.size()))) {
       return FONT_COMPRESSION_FAILURE();
     }
 
     // We replaced 0's. Update overall checksum.
-    font_checksum += ComputeULongSum(table_entry, 12);
+    font_checksum += ComputeULongSum(table_entry);
 
     if (PREDICT_FALSE(!Pad4(out))) {
       return FONT_COMPRESSION_FAILURE();
@@ -1059,10 +1060,11 @@ bool ReconstructFont(uint8_t* transformed_buf,
     if (PREDICT_FALSE(head_table->dst_length < 12)) {
       return FONT_COMPRESSION_FAILURE();
     }
-    uint8_t checksum_adjustment[4];
+    std::array<uint8_t, 4> checksum_adjustment;
     StoreU32(checksum_adjustment, 0, 0xB1B0AFBA - font_checksum);
-    if (PREDICT_FALSE(!out->Write(checksum_adjustment,
-                                  head_table->dst_offset + 8, 4))) {
+    if (PREDICT_FALSE(!out->Write(checksum_adjustment.data(),
+                                  head_table->dst_offset + 8,
+                                  checksum_adjustment.size()))) {
       return FONT_COMPRESSION_FAILURE();
     }
   }
@@ -1070,8 +1072,8 @@ bool ReconstructFont(uint8_t* transformed_buf,
   return true;
 }
 
-bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
-  Buffer file(data, length);
+bool ReadWOFF2Header(std::span<const uint8_t> input_data, WOFF2Header* hdr) {
+  Buffer file(input_data);
 
   uint32_t signature;
   if (PREDICT_FALSE(!file.ReadU32(&signature) || signature != kWoff2Signature ||
@@ -1082,8 +1084,8 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
   // TODO(user): Should call IsValidVersionTag() here.
 
   uint32_t reported_length;
-  if (PREDICT_FALSE(
-      !file.ReadU32(&reported_length) || length != reported_length)) {
+  if (PREDICT_FALSE(!file.ReadU32(&reported_length) ||
+                    input_data.size() != reported_length)) {
     return FONT_COMPRESSION_FAILURE();
   }
   if (PREDICT_FALSE(!file.ReadU16(&hdr->num_tables) || !hdr->num_tables)) {
@@ -1096,7 +1098,8 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
   if (PREDICT_FALSE(!file.Skip(6))) {
     return FONT_COMPRESSION_FAILURE();
   }
-  if (PREDICT_FALSE(!file.ReadU32(&hdr->compressed_length))) {
+  uint32_t compressed_length;
+  if (PREDICT_FALSE(!file.ReadU32(&compressed_length))) {
     return FONT_COMPRESSION_FAILURE();
   }
   // We don't care about these fields of the header:
@@ -1113,8 +1116,8 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
     return FONT_COMPRESSION_FAILURE();
   }
   if (meta_offset) {
-    if (PREDICT_FALSE(
-        meta_offset >= length || length - meta_offset < meta_length)) {
+    if (PREDICT_FALSE(meta_offset >= input_data.size() ||
+                      input_data.size() - meta_offset < meta_length)) {
       return FONT_COMPRESSION_FAILURE();
     }
   }
@@ -1125,8 +1128,8 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
     return FONT_COMPRESSION_FAILURE();
   }
   if (priv_offset) {
-    if (PREDICT_FALSE(
-        priv_offset >= length || length - priv_offset < priv_length)) {
+    if (PREDICT_FALSE(priv_offset >= input_data.size() ||
+                      input_data.size() - priv_offset < priv_length)) {
       return FONT_COMPRESSION_FAILURE();
     }
   }
@@ -1208,20 +1211,21 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
 
   const uint64_t first_table_offset = ComputeOffsetToFirstTable(*hdr);
 
-  hdr->compressed_offset = file.offset();
-  if (PREDICT_FALSE(hdr->compressed_offset >
+  uint64_t compressed_offset = file.offset();
+  if (PREDICT_FALSE(compressed_offset >
                     std::numeric_limits<uint32_t>::max())) {
     return FONT_COMPRESSION_FAILURE();
   }
-  uint64_t src_offset = Round4(hdr->compressed_offset + hdr->compressed_length);
-  uint64_t dst_offset = first_table_offset;
+  hdr->compressed_buf =
+      input_data.subspan(compressed_offset, compressed_length);
+  uint64_t src_offset = Round4(compressed_offset + compressed_length);
 
-
-  if (PREDICT_FALSE(src_offset > length)) {
+  if (PREDICT_FALSE(src_offset > input_data.size())) {
 #ifdef FONT_COMPRESSION_BIN
+    uint64_t dst_offset = first_table_offset;
     fprintf(stderr, "offset fail; src_offset %" PRIu64 " length %lu "
       "dst_offset %" PRIu64 "\n",
-      src_offset, length, dst_offset);
+      src_offset, input_data.size(), dst_offset);
 #endif
     return FONT_COMPRESSION_FAILURE();
   }
@@ -1245,7 +1249,7 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
     }
   }
 
-  if (PREDICT_FALSE(src_offset != Round4(length))) {
+  if (PREDICT_FALSE(src_offset != Round4(input_data.size()))) {
     return FONT_COMPRESSION_FAILURE();
   }
 
@@ -1253,8 +1257,7 @@ bool ReadWOFF2Header(const uint8_t* data, size_t length, WOFF2Header* hdr) {
 }
 
 // Write everything before the actual table data
-bool WriteHeaders(const uint8_t* data, size_t length, RebuildMetadata* metadata,
-                  WOFF2Header* hdr, WOFF2Out* out) {
+bool WriteHeaders(RebuildMetadata* metadata, WOFF2Header* hdr, WOFF2Out* out) {
   std::vector<uint8_t> output(ComputeOffsetToFirstTable(*hdr), 0);
 
   // Re-order tables in output (OTSpec) order
@@ -1277,7 +1280,7 @@ bool WriteHeaders(const uint8_t* data, size_t length, RebuildMetadata* metadata,
   }
 
   // Start building the font
-  uint8_t* result = &output[0];
+  const std::span<uint8_t> result(output);
   size_t offset = 0;
   if (hdr->header_version) {
     // TTC header
@@ -1315,8 +1318,8 @@ bool WriteHeaders(const uint8_t* data, size_t length, RebuildMetadata* metadata,
         offset = StoreTableEntry(result, offset, tag);
       }
 
-      ttc_font.header_checksum = ComputeULongSum(&output[ttc_font.dst_offset],
-                                                 offset - ttc_font.dst_offset);
+      ttc_font.header_checksum = ComputeULongSum(
+          result.subspan(ttc_font.dst_offset, offset - ttc_font.dst_offset));
     }
   } else {
     metadata->font_infos.resize(1);
@@ -1330,7 +1333,7 @@ bool WriteHeaders(const uint8_t* data, size_t length, RebuildMetadata* metadata,
   if (PREDICT_FALSE(!out->Write(&output[0], output.size()))) {
     return FONT_COMPRESSION_FAILURE();
   }
-  metadata->header_checksum = ComputeULongSum(&output[0], output.size());
+  metadata->header_checksum = ComputeULongSum(output);
   return true;
 }
 
@@ -1355,13 +1358,14 @@ bool ConvertWOFF2ToTTF(uint8_t *result, size_t result_length,
 
 bool ConvertWOFF2ToTTF(const uint8_t* data, size_t length,
                        WOFF2Out* out) {
+  std::span<const uint8_t> input_data(data, length);
   RebuildMetadata metadata;
   WOFF2Header hdr;
-  if (!ReadWOFF2Header(data, length, &hdr)) {
+  if (!ReadWOFF2Header(input_data, &hdr)) {
     return FONT_COMPRESSION_FAILURE();
   }
 
-  if (!WriteHeaders(data, length, &metadata, &hdr, out)) {
+  if (!WriteHeaders(&metadata, &hdr, out)) {
     return FONT_COMPRESSION_FAILURE();
   }
 
@@ -1373,20 +1377,18 @@ bool ConvertWOFF2ToTTF(const uint8_t* data, size_t length,
     return FONT_COMPRESSION_FAILURE();
   }
 
-  const uint8_t* src_buf = data + hdr.compressed_offset;
   std::vector<uint8_t> uncompressed_buf(hdr.uncompressed_size);
+  std::span<uint8_t> uncompressed_buf_view(uncompressed_buf);
   if (PREDICT_FALSE(hdr.uncompressed_size < 1)) {
     return FONT_COMPRESSION_FAILURE();
   }
-  if (PREDICT_FALSE(!Woff2Uncompress(&uncompressed_buf[0],
-                                     hdr.uncompressed_size, src_buf,
-                                     hdr.compressed_length))) {
+  if (PREDICT_FALSE(
+          !Woff2Uncompress(uncompressed_buf_view, hdr.compressed_buf))) {
     return FONT_COMPRESSION_FAILURE();
   }
 
   for (size_t i = 0; i < metadata.font_infos.size(); i++) {
-    if (PREDICT_FALSE(!ReconstructFont(&uncompressed_buf[0],
-                                       hdr.uncompressed_size,
+    if (PREDICT_FALSE(!ReconstructFont(uncompressed_buf_view,
                                        &metadata, &hdr, i, out))) {
       return FONT_COMPRESSION_FAILURE();
     }
