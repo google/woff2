@@ -95,6 +95,12 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
       if (!buffer.ReadU16(&point_index)) {
         return FONT_COMPRESSION_FAILURE();
       }
+      // endPtsOfContours must be monotonically increasing per the TrueType
+      // spec. A decreasing value wraps the uint16 subtraction below, causing
+      // huge allocations from small inputs (memory-amplification DoS).
+      if (i > 0 && point_index < last_point_index) {
+        return FONT_COMPRESSION_FAILURE();
+      }
       uint16_t num_points = point_index - last_point_index + (i == 0 ? 1 : 0);
       glyph->contours[i].resize(num_points);
       last_point_index = point_index;
