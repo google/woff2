@@ -108,6 +108,63 @@ add_library(convert_woff2ttf_fuzzer STATIC src/convert_woff2ttf_fuzzer.cc)
 target_link_libraries(convert_woff2ttf_fuzzer woff2dec)
 add_library(convert_woff2ttf_fuzzer_new_entry STATIC src/convert_woff2ttf_fuzzer_new_entry.cc)
 target_link_libraries(convert_woff2ttf_fuzzer_new_entry woff2dec)
+add_library(convert_ttf2woff2_fuzzer STATIC src/convert_ttf2woff2_fuzzer.cc)
+target_link_libraries(convert_ttf2woff2_fuzzer woff2enc)
+
+# Tests (issue #191 regression coverage)
+option(BUILD_TESTING "Build tests" ON)
+if (BUILD_TESTING)
+  enable_testing()
+
+  # Unit test that drives ReadGlyph directly with crafted glyf byte payloads.
+  add_executable(test_read_glyph test/test_read_glyph.cc)
+  target_link_libraries(test_read_glyph woff2enc)
+  add_test(NAME test_read_glyph COMMAND test_read_glyph)
+
+  # End-to-end test: feeds crafted TTFs through ConvertTTFToWOFF2.
+  add_executable(test_convert_ttf2woff2 test/test_convert_ttf2woff2.cc)
+  target_link_libraries(test_convert_ttf2woff2 woff2enc)
+
+  # Generate fixtures at build time (requires Python + fontTools).  CMake's
+  # Python3::Interpreter may resolve to a Python without fontTools; probe
+  # /usr/bin/python3 as well and pick whichever has fontTools importable.
+  find_package(Python3 COMPONENTS Interpreter)
+  set(FIXTURE_PYTHON "")
+  foreach(candidate "${Python3_EXECUTABLE}" "/usr/bin/python3" "python3")
+    if (candidate AND NOT FIXTURE_PYTHON)
+      execute_process(
+        COMMAND ${candidate} -c "import fontTools"
+        RESULT_VARIABLE _probe
+        OUTPUT_QUIET ERROR_QUIET)
+      if (_probe EQUAL 0)
+        set(FIXTURE_PYTHON "${candidate}")
+      endif()
+    endif()
+  endforeach()
+  if (FIXTURE_PYTHON)
+    message(STATUS "Using ${FIXTURE_PYTHON} for fixture generation (fontTools available)")
+    set(FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_fixtures")
+    set(FIXTURE_STAMP "${FIXTURE_DIR}/.stamp")
+    add_custom_command(
+      OUTPUT ${FIXTURE_STAMP}
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${FIXTURE_DIR}
+      COMMAND ${FIXTURE_PYTHON}
+              ${CMAKE_CURRENT_SOURCE_DIR}/test/generate_fixtures.py
+              ${FIXTURE_DIR}
+      COMMAND ${CMAKE_COMMAND} -E touch ${FIXTURE_STAMP}
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test/generate_fixtures.py
+      COMMENT "Generating TTF test fixtures for issue #191"
+      VERBATIM)
+    add_custom_target(test_fixtures DEPENDS ${FIXTURE_STAMP})
+    add_dependencies(test_convert_ttf2woff2 test_fixtures)
+    add_test(NAME test_convert_ttf2woff2
+             COMMAND test_convert_ttf2woff2 ${FIXTURE_DIR})
+  else()
+    message(WARNING "No Python with fontTools found — skipping "
+                    "test_convert_ttf2woff2 (fixture generation requires "
+                    "`pip install fonttools`).")
+  endif()
+endif()
 
 # PC files
 include(CMakeParseArguments)
