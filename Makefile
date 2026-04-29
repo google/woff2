@@ -39,7 +39,9 @@ COMMONOBJ = $(BROTLIOBJ)/common/*.o
 OBJS = $(patsubst %, $(SRCDIR)/%, $(OUROBJ))
 EXECUTABLES=woff2_compress woff2_decompress woff2_info
 EXE_OBJS=$(patsubst %, $(SRCDIR)/%.o, $(EXECUTABLES))
-ARCHIVES=convert_woff2ttf_fuzzer convert_woff2ttf_fuzzer_new_entry
+ARCHIVES=convert_woff2ttf_fuzzer convert_woff2ttf_fuzzer_new_entry \
+         convert_ttf2woff2_fuzzer woff2_memory_out_fuzzer \
+         woff2_glyph_fuzzer woff2_font_fuzzer
 ARCHIVE_OBJS=$(patsubst %, $(SRCDIR)/%.o, $(ARCHIVES))
 
 ifeq (,$(wildcard $(BROTLI)/*))
