@@ -7,9 +7,6 @@ Produces:
   non_monotonic_one_step.ttf    — endPts == [1, 0] (smallest wrap-to-65535 case).
   non_monotonic_large_drop.ttf  — endPts == [0xFFFE, 0] (extreme downward jump).
   dos_reproducer.ttf            — many glyphs each crafted with wraparound.
-  large_endpoint.ttf            — endPts == [0xFFFE, 0xFFFF] (valid arithmetic,
-                                  but num_points on contour 0 is 0xFFFF and the
-                                  record doesn't contain that many bytes).
 
 Each "non-monotonic" / "dos" fixture is built by starting from a valid font
 and surgically rewriting the glyf/loca tables so the arithmetic problem
@@ -176,11 +173,6 @@ def main():
                                                         include_coords=False,
                                                         trailing_padding=4))
     write("dos_reproducer.ttf", dos)
-
-    # 6. Valid arithmetic but physically impossible: [0xFFFE, 0xFFFF].
-    large = rewrite_glyph(baseline, 1, simple_glyph_bytes(
-        [0xFFFE, 0xFFFF], include_coords=False, trailing_padding=8))
-    write("large_endpoint.ttf", large)
 
 
 if __name__ == "__main__":

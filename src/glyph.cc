@@ -102,9 +102,6 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
         return FONT_COMPRESSION_FAILURE();
       }
       uint16_t num_points = point_index - last_point_index + (i == 0 ? 1 : 0);
-      if (num_points > len - buffer.offset()) {
-        return FONT_COMPRESSION_FAILURE();
-      }
       glyph->contours[i].resize(num_points);
       last_point_index = point_index;
     }

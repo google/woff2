@@ -17,7 +17,6 @@
 // Each test builds just enough bytes to reach the behaviour under test and
 // asserts ReadGlyph's return value (and, on success, the per-contour sizes).
 
-#include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -68,6 +67,20 @@ std::vector<uint8_t> BuildSimpleGlyph(const std::vector<uint16_t>& endPts,
   }
   for (size_t i = 0; i < trailing_padding; ++i) PutU8(out, 0);
   return out;
+}
+
+void AppendRepeatedSamePointFlags(size_t n_points, std::vector<uint8_t>* out) {
+  const uint8_t kSamePointFlag = 0x01 | 0x10 | 0x20;
+  while (n_points > 0) {
+    size_t run = n_points > 256 ? 256 : n_points;
+    if (run == 1) {
+      PutU8(*out, kSamePointFlag);
+    } else {
+      PutU8(*out, kSamePointFlag | 0x08);
+      PutU8(*out, static_cast<uint8_t>(run - 1));
+    }
+    n_points -= run;
+  }
 }
 
 // Test runner scaffolding -----------------------------------------------------
@@ -201,43 +214,21 @@ void Test_Simple_NonMonotonic_AtLaterContour_Rejected() {
   }
 }
 
-// Arithmetically valid but physically impossible: a single contour with
-// endPtsOfContours[0] = 1000 and a glyph record far too small to contain
-// the downstream flags/coords.  The belt-and-braces check (PLAN section 3.2)
-// requires rejection before resize() allocates 1001 Points.
-void Test_Simple_NumPoints_ExceedsRemainingBuffer() {
-  // Construct manually so the record is exactly 16 bytes:
-  //   header (10) + endPts (2) + instructionLength (2) + 2 filler bytes.
-  // num_points = 1001, remaining after endPts read = 16 - 12 = 4 bytes.
+// Flags are run-length encoded, so many logical points may be represented by
+// far fewer flag bytes. This guards against reintroducing a remaining-bytes
+// bound that assumes one stored flag byte per point.
+void Test_Simple_RleFlags_CanRepresentManyPoints() {
   std::vector<uint8_t> bytes;
-  PutI16(bytes, 1);      // numberOfContours
+  PutI16(bytes, 1);
   PutI16(bytes, 0); PutI16(bytes, 0); PutI16(bytes, 10); PutI16(bytes, 10);
-  PutU16(bytes, 1000);   // endPts[0] = 1000 -> num_points = 1001
-  PutU16(bytes, 0);      // instructionLength
-  PutU8(bytes, 0); PutU8(bytes, 0);  // two stray bytes
-  assert(bytes.size() == 16);
+  PutU16(bytes, 1000);  // 1001 logical points.
+  PutU16(bytes, 0);     // instructionLength
+  AppendRepeatedSamePointFlags(1001, &bytes);
   woff2::Glyph g;
   bool ok = woff2::ReadGlyph(bytes.data(), bytes.size(), &g);
-  CHECK(!ok);
-  // Fix (b) requirement: the over-budget allocation must not have happened.
-  if (!g.contours.empty()) CHECK(g.contours[0].size() < 500);
-}
-
-// Another buffer-bound variant with multiple contours:
-// endPts [3, 127], num_points on contour 1 = 124, but only ~4 bytes remain.
-void Test_Simple_NumPoints_ExceedsRemaining_MultiContour() {
-  // header (10) + 2 endPts (4) + instructionLength (2) = 16 bytes so far.
-  // Give only a few trailing bytes so the total is well under 124 points.
-  std::vector<uint8_t> bytes;
-  PutI16(bytes, 2);
-  PutI16(bytes, 0); PutI16(bytes, 0); PutI16(bytes, 10); PutI16(bytes, 10);
-  PutU16(bytes, 3);
-  PutU16(bytes, 127);
-  PutU16(bytes, 0);  // instructionLength
-  for (int i = 0; i < 4; ++i) PutU8(bytes, 0);
-  woff2::Glyph g;
-  bool ok = woff2::ReadGlyph(bytes.data(), bytes.size(), &g);
-  CHECK(!ok);
+  CHECK(ok);
+  CHECK(g.contours.size() == 1);
+  CHECK(g.contours[0].size() == 1001);
 }
 
 // Scaled-up reproducer of the reported DoS: many contours where every odd
@@ -360,26 +351,6 @@ void Test_Simple_IncrementByOne() {
   for (size_t i = 0; i < 4; ++i) CHECK(g.contours[i].size() == 1);
 }
 
-// endPts exactly at uint16 max: [0xFFFE, 0xFFFF].  Monotonic, so the
-// monotonicity check passes; num_points on contour 1 = 1.  But contour 0
-// wants num_points = 0xFFFE + 1 = 0xFFFF, and providing that many bytes is
-// infeasible -- the belt-and-braces check (PLAN 3.2) should reject it
-// because num_points exceeds remaining buffer, BEFORE resize().
-void Test_Simple_Max_Endpoint_RejectedByBufferBound() {
-  std::vector<uint8_t> bytes;
-  PutI16(bytes, 2);
-  PutI16(bytes, 0); PutI16(bytes, 0); PutI16(bytes, 10); PutI16(bytes, 10);
-  PutU16(bytes, 0xFFFE);
-  PutU16(bytes, 0xFFFF);
-  PutU16(bytes, 0);  // instructionLength
-  // Trailing bytes nowhere near 0xFFFF.
-  for (int i = 0; i < 8; ++i) PutU8(bytes, 0);
-  woff2::Glyph g;
-  bool ok = woff2::ReadGlyph(bytes.data(), bytes.size(), &g);
-  CHECK(!ok);
-  if (!g.contours.empty()) CHECK(g.contours[0].size() < 1000);
-}
-
 }  // namespace
 
 int main() {
@@ -391,8 +362,7 @@ int main() {
   RUN(Test_Simple_NonMonotonic_OneStepDown_Rejected);
   RUN(Test_Simple_NonMonotonic_LargeToZero_Rejected);
   RUN(Test_Simple_NonMonotonic_AtLaterContour_Rejected);
-  RUN(Test_Simple_NumPoints_ExceedsRemainingBuffer);
-  RUN(Test_Simple_NumPoints_ExceedsRemaining_MultiContour);
+  RUN(Test_Simple_RleFlags_CanRepresentManyPoints);
   RUN(Test_Simple_DoS_Reproducer_ManyContours);
   RUN(Test_Simple_ZeroContours_NoCrash);
   RUN(Test_NumContours_LessThanNegativeOne_Rejected);
@@ -402,7 +372,6 @@ int main() {
   RUN(Test_Simple_TwoContours_BothZero_Accepted);
   RUN(Test_Simple_NonMonotonic_OneUnderPrev_Rejected);
   RUN(Test_Simple_IncrementByOne);
-  RUN(Test_Simple_Max_Endpoint_RejectedByBufferBound);
 
   std::fprintf(stderr, "\n%d/%d tests passed\n", g_total - g_failed, g_total);
   return g_failed == 0 ? 0 : 1;

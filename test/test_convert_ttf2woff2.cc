@@ -139,18 +139,6 @@ TEST(RejectsDosReproducer) {
   CHECK_MSG(!ok, "DoS reproducer must be rejected");
 }
 
-// Valid arithmetic, physically impossible: num_points = 0xFFFF but the glyph
-// record is only a few hundred bytes.  Belt-and-braces check (PLAN 3.2)
-// must reject this.
-TEST(RejectsOversizedEndpoint) {
-  std::vector<uint8_t> input;
-  CHECK_MSG(ReadFile(FixturePath("large_endpoint.ttf"), &input),
-            "failed to read large_endpoint.ttf");
-  bool ok = RunEncoder(input, nullptr);
-  CHECK_MSG(!ok, "endPts [0xFFFE,0xFFFF] with tiny glyph record must be "
-                 "rejected by the buffer-bound check");
-}
-
 // Robustness: arbitrary short junk must be rejected cleanly (not crash, not
 // OOM).  Establishes that ConvertTTFToWOFF2 has sensible behaviour on garbage.
 TEST(RejectsGarbageInput) {
@@ -184,7 +172,6 @@ int main(int argc, char** argv) {
   Run_RejectsOneStepDown();
   Run_RejectsLargeDrop();
   Run_RejectsDosReproducer();
-  Run_RejectsOversizedEndpoint();
   Run_RejectsGarbageInput();
   Run_RejectsEmptyInput();
 
