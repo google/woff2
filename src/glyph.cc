@@ -95,6 +95,12 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
       if (!buffer.ReadU16(&point_index)) {
         return FONT_COMPRESSION_FAILURE();
       }
+      // endPtsOfContours must be monotonically non-decreasing (sfnt spec).
+      // Reject point_index < last_point_index to prevent uint16_t subtraction
+      // wraparound that drives an unbounded resize (issue #191).
+      if (i > 0 && point_index < last_point_index) {
+        return FONT_COMPRESSION_FAILURE();
+      }
       uint16_t num_points = point_index - last_point_index + (i == 0 ? 1 : 0);
       glyph->contours[i].resize(num_points);
       last_point_index = point_index;
