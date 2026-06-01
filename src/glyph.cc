@@ -305,7 +305,10 @@ bool StorePoints(const Glyph& glyph, size_t* offset,
     dst[(*offset)++] = repeat_count;
   }
 
-  if (*offset + x_bytes + y_bytes > dst_size) {
+  size_t xy_bytes = x_bytes + y_bytes;
+  if (xy_bytes < x_bytes ||
+      dst_size < xy_bytes ||
+      *offset > dst_size - xy_bytes) {
     return FONT_COMPRESSION_FAILURE();
   }
 
