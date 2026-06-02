@@ -29,6 +29,16 @@ static const int32_t kFLAG_WE_HAVE_AN_X_AND_Y_SCALE = 1 << 6;
 static const int32_t kFLAG_WE_HAVE_A_TWO_BY_TWO = 1 << 7;
 static const int32_t kFLAG_WE_HAVE_INSTRUCTIONS = 1 << 8;
 
+bool SafeIntAddition(int a, int b, int* result) {
+  if (PREDICT_FALSE(
+          ((a > 0) && (b > std::numeric_limits<int>::max() - a)) ||
+          ((a < 0) && (b < std::numeric_limits<int>::min() - a)))) {
+    return false;
+  }
+  *result = a + b;
+  return true;
+}
+
 bool ReadCompositeGlyphData(Buffer* buffer, Glyph* glyph) {
   glyph->have_instructions = false;
   glyph->composite_data = buffer->buffer() + buffer->offset();
@@ -151,7 +161,10 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
             return FONT_COMPRESSION_FAILURE();
           }
           int sign = (flag & kFLAG_XREPEATSIGN) ? 1 : -1;
-          glyph->contours[i][j].x = prev_x + sign * x_delta;
+          if (!SafeIntAddition(prev_x, sign * x_delta,
+                               &glyph->contours[i][j].x)) {
+            return FONT_COMPRESSION_FAILURE();
+          }
         } else {
           // double byte x-delta coord value
           int16_t x_delta = 0;
@@ -160,7 +173,9 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
               return FONT_COMPRESSION_FAILURE();
             }
           }
-          glyph->contours[i][j].x = prev_x + x_delta;
+          if (!SafeIntAddition(prev_x, x_delta, &glyph->contours[i][j].x)) {
+            return FONT_COMPRESSION_FAILURE();
+          }
         }
         prev_x = glyph->contours[i][j].x;
       }
@@ -178,7 +193,10 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
             return FONT_COMPRESSION_FAILURE();
           }
           int sign = (flag & kFLAG_YREPEATSIGN) ? 1 : -1;
-          glyph->contours[i][j].y = prev_y + sign * y_delta;
+          if (!SafeIntAddition(prev_y, sign * y_delta,
+                               &glyph->contours[i][j].y)) {
+            return FONT_COMPRESSION_FAILURE();
+          }
         } else {
           // double byte y-delta coord value
           int16_t y_delta = 0;
@@ -187,7 +205,9 @@ bool ReadGlyph(const uint8_t* data, size_t len, Glyph* glyph) {
               return FONT_COMPRESSION_FAILURE();
             }
           }
-          glyph->contours[i][j].y = prev_y + y_delta;
+          if (!SafeIntAddition(prev_y, y_delta, &glyph->contours[i][j].y)) {
+            return FONT_COMPRESSION_FAILURE();
+          }
         }
         prev_y = glyph->contours[i][j].y;
       }
