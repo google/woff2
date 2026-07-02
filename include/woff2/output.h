@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cstdint>
 #include <memory>
 #include <string>
 
