@@ -36,6 +36,8 @@ int main(int argc, char **argv) {
   if (ok) {
     woff2::SetFileContents(outfilename, output.begin(),
         output.begin() + out.Size());
+  } else {
+     fprintf(stderr, "Decompresison failed\n");
   }
   return ok ? 0 : 1;
 }
