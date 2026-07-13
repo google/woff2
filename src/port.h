@@ -11,6 +11,10 @@
 
 #include <assert.h>
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 namespace woff2 {
 
 typedef unsigned int       uint32;
@@ -18,6 +22,13 @@ typedef unsigned int       uint32;
 inline int Log2Floor(uint32 n) {
 #if defined(__GNUC__)
   return n == 0 ? -1 : 31 ^ __builtin_clz(n);
+#elif defined(_MSC_VER)
+  unsigned long where;
+  if (_BitScanReverse(&where, n)) {
+    return where;
+  } else {
+    return -1;
+  }
 #else
   if (n == 0)
     return -1;
