@@ -11,6 +11,10 @@
 
 #include <assert.h>
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 namespace woff2 {
 
 typedef unsigned int       uint32;
@@ -18,6 +22,12 @@ typedef unsigned int       uint32;
 inline int Log2Floor(uint32 n) {
 #if defined(__GNUC__)
   return n == 0 ? -1 : 31 ^ __builtin_clz(n);
+#elif defined(_MSC_VER)
+  unsigned long result;
+  if (n == 0)
+    return -1;
+  _BitScanReverse(&result, n);
+  return result;
 #else
   if (n == 0)
     return -1;
@@ -54,9 +64,14 @@ inline int Log2Floor(uint32 n) {
 
 #if (defined(__ARM_ARCH) && (__ARM_ARCH == 7)) || \
     (defined(M_ARM) && (M_ARM == 7)) || \
-    defined(__aarch64__) || defined(__ARM64_ARCH_8__) || defined(__i386) || \
+    defined(__aarch64__) || defined(__ARM64_ARCH_8__) || \
+    defined(_M_ARM64) || \
+    defined(__i386) || \
     defined(_M_IX86) || defined(__x86_64__) || defined(_M_X64)
-#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+#if defined(_WIN32)
+/* Windows is always little-endian on all supported architectures */
+#define WOFF_LITTLE_ENDIAN
+#elif defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 #define WOFF_LITTLE_ENDIAN
 #elif defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
 #define WOFF_BIG_ENDIAN
