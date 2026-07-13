@@ -7,7 +7,7 @@
 # several CI services, such as Travis and Drone, use it.  Solaris 11
 # has 2.8.6, and it's not difficult to support if you already have to
 # support 2.8.7.
-cmake_minimum_required(VERSION 2.8.6)
+cmake_minimum_required(VERSION 3.5.0)
 
 project(woff2)
 
@@ -43,24 +43,29 @@ if (NOT BROTLIENC_FOUND)
 endif ()
 
 # Set compiler flags
-if (NOT CANONICAL_PREFIXES)
-    add_definitions(-no-canonical-prefixes)
-  endif ()
 if (NOISY_LOGGING)
     add_definitions(-DFONT_COMPRESSION_BIN)
 endif ()
 add_definitions(-D__STDC_FORMAT_MACROS)
-set(COMMON_FLAGS -fno-omit-frame-pointer)
 
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    add_definitions(-DOS_MACOSX)
+if (MSVC)
+    # MSVC-specific flags
+    set(COMMON_FLAGS "/W3")
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 else ()
-    set(COMMON_FLAGS "${COMMON_FLAG} -fno-omit-frame-pointer")
-endif()
+    # GCC/Clang-specific flags
+    if (NOT CANONICAL_PREFIXES)
+        set(COMMON_FLAGS "-no-canonical-prefixes")
+    endif ()
+    set(COMMON_FLAGS "${COMMON_FLAGS} -fno-omit-frame-pointer")
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMMON_FLAG}")
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+        add_definitions(-DOS_MACOSX)
+    endif()
+endif ()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMMON_FLAG}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMMON_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMMON_FLAGS}")
 set(CMAKE_CXX_STANDARD 11)
 
 # Set search path for our private/public headers as well as Brotli headers
