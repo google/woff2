@@ -25,6 +25,7 @@
 #include "./transform.h"
 #include "./variable_length.h"
 #include "./woff2_common.h"
+#include "./version.h"
 
 namespace woff2 {
 
@@ -453,6 +454,10 @@ fprintf(stderr, "Missing table index for offset 0x%08x\n",
     return FONT_COMPRESSION_FAILURE();
   }
   return true;
+}
+
+uint32_t EncoderVersion (void) {
+	return WOFF2_VERSION;
 }
 
 } // namespace woff2
