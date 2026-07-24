@@ -10,6 +10,7 @@
 
 #include <stdlib.h>
 #include <algorithm>
+#include <cassert>
 #include <complex>
 #include <cstring>
 #include <limits>
