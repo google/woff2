@@ -62,10 +62,6 @@ const size_t kCompositeGlyphBegin = 10;
 // Largest glyph ever observed was 72k bytes
 const size_t kDefaultGlyphBuf = 5120;
 
-// Over 14k test fonts the max compression ratio seen to date was ~20.
-// >100 suggests you wrote a bad uncompressed size.
-const float kMaxPlausibleCompressionRatio = 100.0;
-
 // metadata for a TTC font entry
 struct TtcFont {
   uint32_t flavor;
@@ -1365,10 +1361,23 @@ bool ConvertWOFF2ToTTF(const uint8_t* data, size_t length,
     return FONT_COMPRESSION_FAILURE();
   }
 
-  const float compression_ratio = (float) hdr.uncompressed_size / length;
-  if (compression_ratio > kMaxPlausibleCompressionRatio) {
+  // hdr.uncompressed_size is attacker-controlled: it is the sum of the table
+  // directory's transform lengths and it sizes the decompression buffer below.
+  // Bound it before allocating. A font that can decode successfully
+  // reconstructs to at most kDefaultMaxSize, and a valid font's transformed
+  // table data is never larger than its reconstructed output, so a larger
+  // uncompressed size can only be a decompression-bomb claim.
+  //
+  // This used to be a compression-ratio heuristic (reject when uncompressed
+  // size / file size exceeded a fixed ratio), but the file size is just as
+  // attacker-controlled so the ratio was bypassable, and legitimately
+  // highly-compressible fonts (e.g. subset fonts with many repeated empty
+  // glyphs) can exceed any fixed ratio. The absolute bound is what actually
+  // limits the allocation.
+  if (PREDICT_FALSE(hdr.uncompressed_size > kDefaultMaxSize)) {
 #ifdef FONT_COMPRESSION_BIN
-    fprintf(stderr, "Implausible compression ratio %.01f\n", compression_ratio);
+    fprintf(stderr, "Implausible uncompressed size %u\n",
+            hdr.uncompressed_size);
 #endif
     return FONT_COMPRESSION_FAILURE();
   }
