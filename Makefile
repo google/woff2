@@ -10,6 +10,10 @@ CXX ?= g++
 CANONICAL_PREFIXES ?= -no-canonical-prefixes
 NOISY_LOGGING ?= -DFONT_COMPRESSION_BIN
 COMMON_FLAGS = -fno-omit-frame-pointer $(CANONICAL_PREFIXES) $(NOISY_LOGGING) -D __STDC_FORMAT_MACROS
+# Brotli reads words by casting a byte pointer to the target type unless it is
+# built in its portable mode. Those pointers are not aligned, so the casts are
+# undefined behavior; use the memcpy based loads instead.
+BROTLI_CPPFLAGS ?= -DBROTLI_BUILD_PORTABLE
 
 ARFLAGS = crf
 
@@ -56,7 +60,7 @@ $(EXECUTABLES) : $(EXE_OBJS) deps
 	$(CXX) $(LFLAGS) $(OBJS) $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
 
 deps :
-	$(MAKE) -C $(BROTLI) lib
+	$(MAKE) -C $(BROTLI) lib CPPFLAGS="$(BROTLI_CPPFLAGS)"
 
 clean :
 	rm -f $(OBJS) $(EXE_OBJS) $(EXECUTABLES)
