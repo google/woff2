@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := all
+
 OS := $(shell uname)
 
 CPPFLAGS = -I./brotli/c/include/ -I./src -I./include
@@ -31,10 +33,13 @@ OUROBJ = font.o glyph.o normalize.o table_tags.o transform.o \
          variable_length.o
 
 BROTLI = brotli
-BROTLIOBJ = $(BROTLI)/bin/obj/c
-ENCOBJ = $(BROTLIOBJ)/enc/*.o
-DECOBJ = $(BROTLIOBJ)/dec/*.o
-COMMONOBJ = $(BROTLIOBJ)/common/*.o
+BROTLI_SRC = $(wildcard $(BROTLI)/c/common/*.c) \
+             $(wildcard $(BROTLI)/c/dec/*.c) \
+             $(wildcard $(BROTLI)/c/enc/*.c)
+BROTLI_OBJ = $(BROTLI_SRC:.c=.o)
+
+$(BROTLI_OBJ): %.o: %.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -I$(BROTLI) -c $< -o $@
 
 OBJS = $(patsubst %, $(SRCDIR)/%, $(OUROBJ))
 EXECUTABLES=woff2_compress woff2_decompress woff2_info
@@ -50,14 +55,13 @@ all : $(OBJS) $(EXECUTABLES) $(ARCHIVES)
 
 $(ARCHIVES) : $(ARCHIVE_OBJS) $(OBJS) deps
 	$(AR) $(ARFLAGS) $(SRCDIR)/$@.a $(OBJS) \
-	      $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o
+	      $(BROTLI_OBJ) $(SRCDIR)/$@.o
 
 $(EXECUTABLES) : $(EXE_OBJS) deps
-	$(CXX) $(LFLAGS) $(OBJS) $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
+	$(CXX) $(LFLAGS) $(OBJS) $(BROTLI_OBJ) $(SRCDIR)/$@.o -o $@
 
-deps :
-	$(MAKE) -C $(BROTLI) lib
+deps : $(BROTLI_OBJ)
 
 clean :
 	rm -f $(OBJS) $(EXE_OBJS) $(EXECUTABLES)
-	$(MAKE) -C $(BROTLI) clean
+	rm -f $(BROTLI_OBJ)
