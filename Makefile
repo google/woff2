@@ -9,9 +9,10 @@ CXX ?= g++
 # It's helpful to be able to turn these off for fuzzing
 CANONICAL_PREFIXES ?= -no-canonical-prefixes
 NOISY_LOGGING ?= -DFONT_COMPRESSION_BIN
-COMMON_FLAGS = -fno-omit-frame-pointer $(CANONICAL_PREFIXES) $(NOISY_LOGGING) -D __STDC_FORMAT_MACROS
+COMMON_FLAGS = -fno-omit-frame-pointer $(CANONICAL_PREFIXES) $(NOISY_LOGGING)
 
-ARFLAGS = crf
+# PATCHED: Changed 'crf' to 'crs' for LLVM ar compatibility on Termux
+ARFLAGS = crs
 
 ifeq ($(OS), Darwin)
   CPPFLAGS += -DOS_MACOSX
@@ -19,7 +20,6 @@ ifeq ($(OS), Darwin)
 else
   COMMON_FLAGS += -fno-tree-vrp
 endif
-
 
 CFLAGS += $(COMMON_FLAGS)
 CXXFLAGS += $(COMMON_FLAGS) -std=c++11

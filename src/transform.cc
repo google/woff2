@@ -1,8 +1,6 @@
 /* Copyright 2013 Google Inc. All Rights Reserved.
-
    Distributed under MIT license.
-   See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
-*/
+   See file LICENSE for detail or copy at https://opensource.org/licenses/MIT*/
 
 /* Library for preprocessing fonts as part of the WOFF 2.0 conversion. */
 
@@ -24,11 +22,10 @@ const int FLAG_ARG_1_AND_2_ARE_WORDS = 1 << 0;
 const int FLAG_WE_HAVE_INSTRUCTIONS = 1 << 8;
 const int FLAG_OVERLAP_SIMPLE_BITMAP = 1 << 0;
 
+// PATCHED: Replaced raw memcpy with safe std::vector insertion
 void WriteBytes(std::vector<uint8_t>* out, const uint8_t* data, size_t len) {
   if (len == 0) return;
-  size_t offset = out->size();
-  out->resize(offset + len);
-  memcpy(&(*out)[offset], data, len);
+  out->insert(out->end(), data, data + len);
 }
 
 void WriteBytes(std::vector<uint8_t>* out, const std::vector<uint8_t>& in) {
@@ -72,8 +69,8 @@ class GlyfEncoder {
   void GetTransformedGlyfBytes(std::vector<uint8_t>* result) {
     WriteUShort(result, 0);  // Version
     WriteUShort(result, overlap_bitmap_.empty()
-                            ? 0x00
-                            : FLAG_OVERLAP_SIMPLE_BITMAP);  // Flags
+                         ? 0x00
+                         : FLAG_OVERLAP_SIMPLE_BITMAP);  // Flags
     WriteUShort(result, n_glyphs_);
     WriteUShort(result, 0);  // index_format, will be set later
     WriteLong(result, n_contour_stream_.size());
@@ -193,22 +190,22 @@ class GlyfEncoder {
     int xy_sign_bits = x_sign_bit + 2 * y_sign_bit;
     if (x == 0 && abs_y < 1280) {
       flag_byte_stream_.push_back(on_curve_bit +
-                                  ((abs_y & 0xf00) >> 7) + y_sign_bit);
+                               ((abs_y & 0xf00) >> 7) + y_sign_bit);
       glyph_stream_.push_back(abs_y & 0xff);
     } else if (y == 0 && abs_x < 1280) {
       flag_byte_stream_.push_back(on_curve_bit + 10 +
-                                  ((abs_x & 0xf00) >> 7) + x_sign_bit);
+                              ((abs_x & 0xf00) >> 7) + x_sign_bit);
       glyph_stream_.push_back(abs_x & 0xff);
     } else if (abs_x < 65 && abs_y < 65) {
       flag_byte_stream_.push_back(on_curve_bit + 20 +
-                                  ((abs_x - 1) & 0x30) +
-                                  (((abs_y - 1) & 0x30) >> 2) +
-                                  xy_sign_bits);
+                              ((abs_x - 1) & 0x30) +
+                              (((abs_y - 1) & 0x30) >> 2) +
+                              xy_sign_bits);
       glyph_stream_.push_back((((abs_x - 1) & 0xf) << 4) | ((abs_y - 1) & 0xf));
     } else if (abs_x < 769 && abs_y < 769) {
       flag_byte_stream_.push_back(on_curve_bit + 84 +
-                                  12 * (((abs_x - 1) & 0x300) >> 8) +
-                                  (((abs_y - 1) & 0x300) >> 6) + xy_sign_bits);
+                              12 * (((abs_x - 1) & 0x300) >> 8) +
+                              (((abs_y - 1) & 0x300) >> 6) + xy_sign_bits);
       glyph_stream_.push_back((abs_x - 1) & 0xff);
       glyph_stream_.push_back((abs_y - 1) & 0xff);
     } else if (abs_x < 4096 && abs_y < 4096) {
@@ -357,15 +354,12 @@ bool TransformHmtxTable(Font* font) {
       if (!hmtx_buf.ReadU16(&advance_width)) {
         return FONT_COMPRESSION_FAILURE();
       }
-
       if (!hmtx_buf.ReadS16(&lsb)) {
         return FONT_COMPRESSION_FAILURE();
       }
-
       if (glyph_size > 0 && glyph.x_min != lsb) {
         remove_proportional_lsb = false;
       }
-
       advance_widths.push_back(advance_width);
       proportional_lsbs.push_back(lsb);
     } else {
@@ -422,7 +416,6 @@ bool TransformHmtxTable(Font* font) {
   transformed_hmtx->flag_byte = 1 << 6;
   transformed_hmtx->length = transformed_hmtx->buffer.size();
   transformed_hmtx->data = transformed_hmtx->buffer.data();
-
 
   return true;
 }
