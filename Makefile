@@ -31,10 +31,10 @@ OUROBJ = font.o glyph.o normalize.o table_tags.o transform.o \
          variable_length.o
 
 BROTLI = brotli
-BROTLIOBJ = $(BROTLI)/bin/obj/c
-ENCOBJ = $(BROTLIOBJ)/enc/*.o
-DECOBJ = $(BROTLIOBJ)/dec/*.o
-COMMONOBJ = $(BROTLIOBJ)/common/*.o
+ENCOBJ = $(patsubst %.c, %.o, $(wildcard $(BROTLI)/c/enc/*.c))
+DECOBJ = $(patsubst %.c, %.o, $(wildcard $(BROTLI)/c/dec/*.c))
+COMMONOBJ = $(patsubst %.c, %.o, $(wildcard $(BROTLI)/c/common/*.c))
+BROTLI_OBJS = $(COMMONOBJ) $(ENCOBJ) $(DECOBJ)
 
 OBJS = $(patsubst %, $(SRCDIR)/%, $(OUROBJ))
 EXECUTABLES=woff2_compress woff2_decompress woff2_info
@@ -48,16 +48,13 @@ endif
 
 all : $(OBJS) $(EXECUTABLES) $(ARCHIVES)
 
-$(ARCHIVES) : $(ARCHIVE_OBJS) $(OBJS) deps
+$(ARCHIVES) : $(ARCHIVE_OBJS) $(OBJS) $(BROTLI_OBJS)
 	$(AR) $(ARFLAGS) $(SRCDIR)/$@.a $(OBJS) \
-	      $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o
+	      $(BROTLI_OBJS) $(SRCDIR)/$@.o
 
-$(EXECUTABLES) : $(EXE_OBJS) deps
-	$(CXX) $(LFLAGS) $(OBJS) $(COMMONOBJ) $(ENCOBJ) $(DECOBJ) $(SRCDIR)/$@.o -o $@
-
-deps :
-	$(MAKE) -C $(BROTLI) lib
+$(EXECUTABLES) : $(EXE_OBJS) $(OBJS) $(BROTLI_OBJS)
+	$(CXX) $(LFLAGS) $(OBJS) $(BROTLI_OBJS) $(SRCDIR)/$@.o -o $@
 
 clean :
-	rm -f $(OBJS) $(EXE_OBJS) $(EXECUTABLES)
-	$(MAKE) -C $(BROTLI) clean
+	rm -f $(OBJS) $(BROTLI_OBJS) $(EXE_OBJS) $(EXECUTABLES) \
+	      $(ARCHIVE_OBJS) $(patsubst %, $(SRCDIR)/%.a, $(ARCHIVES))
